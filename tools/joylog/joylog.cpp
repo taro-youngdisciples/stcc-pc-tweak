@@ -9,6 +9,7 @@
 #define DIRECTINPUT_VERSION 0x0800
 #include <windows.h>
 #include <dinput.h>
+#include <share.h>
 #include <tlhelp32.h>
 
 #include <cstdarg>
@@ -83,18 +84,42 @@ BOOL CALLBACK EnumObjectsCb(LPCDIDEVICEOBJECTINSTANCEW o, LPVOID) {
     return DIENUM_CONTINUE;
 }
 
+// 接続失敗の理由は、前回と変わったときだけ記録する
+void LogOpenFailure(const char* reason, HRESULT hr) {
+    static std::string last;
+    char b[128];
+    std::snprintf(b, sizeof(b), "%s (0x%08lX)", reason, static_cast<unsigned long>(hr));
+    if (last != b) {
+        Log("open failed: %s", b);
+        last = b;
+    }
+}
+
 IDirectInputDevice8W* Open(IDirectInput8W* di, HWND hwnd, bool verbose) {
     Found f{};
-    di->EnumDevices(DI8DEVCLASS_GAMECTRL, EnumDevicesCb, &f, DIEDFL_ATTACHEDONLY);
-    if (!f.ok) {
+    HRESULT hr = di->EnumDevices(DI8DEVCLASS_GAMECTRL, EnumDevicesCb, &f, DIEDFL_ATTACHEDONLY);
+    if (FAILED(hr) || !f.ok) {
+        LogOpenFailure(FAILED(hr) ? "EnumDevices failed" : "no attached game controller", hr);
         return nullptr;
     }
     IDirectInputDevice8W* dev = nullptr;
-    if (FAILED(di->CreateDevice(f.guid, &dev, nullptr))) {
+    hr = di->CreateDevice(f.guid, &dev, nullptr);
+    if (FAILED(hr)) {
+        LogOpenFailure("CreateDevice failed", hr);
         return nullptr;
     }
-    dev->SetDataFormat(&c_dfDIJoystick);
-    dev->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
+    hr = dev->SetDataFormat(&c_dfDIJoystick);
+    if (FAILED(hr)) {
+        LogOpenFailure("SetDataFormat failed", hr);
+        dev->Release();
+        return nullptr;
+    }
+    hr = dev->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
+    if (FAILED(hr)) {
+        LogOpenFailure("SetCooperativeLevel failed", hr);
+        dev->Release();
+        return nullptr;
+    }
     DIDEVCAPS caps{};
     caps.dwSize = sizeof(caps);
     dev->GetCapabilities(&caps);
@@ -111,7 +136,8 @@ IDirectInputDevice8W* Open(IDirectInput8W* di, HWND hwnd, bool verbose) {
 int wmain(int argc, wchar_t** argv) {
     const int seconds = argc > 1 ? _wtoi(argv[1]) : 600;
     const wchar_t* path = argc > 2 ? argv[2] : L"joylog.txt";
-    _wfopen_s(&g_out, path, L"w");
+    // 実行中も他プロセスから読めるよう、書き込みだけを拒否する共有モードで開く
+    g_out = _wfsopen(path, L"w", _SH_DENYWR);
     g_start = GetTickCount();
 
     // DirectInput の協調レベル設定にはこのプロセスのトップレベルウィンドウが要る（表示はしない）
