@@ -475,6 +475,25 @@ type = "struct[2] (0x44 bytes each)"
 confidence = "likely"
 note = "初期化ループは 0x896378 から 0x44 刻みで 0x896400 まで → 2 台分"
 
+# ---------------------------------------------------------------- CD check
+[[function]]
+name = "Cd_FindDrive"
+addr = 0x0043BAB0
+confidence = "confirmed"
+note = "GetLogicalDrives で全ドライブを走査し、GetDriveTypeA==DRIVE_CDROM かつ <drive>\\stcc\\stcc.exe と <drive>\\stcc\\data\\bg\\sky.bmp が開けるドライブ番号を返す（無ければ -1）。ボリュームラベルは見ない"
+
+[[function]]
+name = "Cd_RequireDisc"
+addr = 0x0043BBF0
+confidence = "confirmed"
+note = "Cd_FindDrive が -1 の間「Please insert The SEGA Touring Car Championship CD.」(MB_RETRYCANCEL) を出し、キャンセルで 0。呼び出し元 0x439549（起動時 InitInstance）、0x40B422"
+
+[[global]]
+name = "g_CdDriveIndex"
+addr = 0x0056CE90
+type = "int"
+confidence = "confirmed"
+
 # ---------------------------------------------------------------- CD audio (MCI)
 [[function]]
 name = "Cd_Open"

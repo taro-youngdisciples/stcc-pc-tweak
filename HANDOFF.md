@@ -294,6 +294,8 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
 - ツール: Git、VS Build Tools（C++ x86）、Python 3.13 + `.venv`（`tools\requirements.txt`）。Ghidra + JDK 21 は解析が必要になったときだけ
 - ゲーム: ディスクイメージをマウントして `Setup.exe` → `D:\Games\STCC`（DirectX は入れない）→ v1.02 の `STCC.EXE` を上書き（ディスクの `D3D\updatej.exe` 内）→ DirectPlay の Windows 機能を有効化
+  - LAN でインストール済みフォルダごとコピーする場合は、`C:\WINDOWS\stcc.ini`（DataPath/ExePath、要管理者権限）も同じ内容で置けば Setup は不要
+- **ディスクイメージのマウントは必須**（2026-09-13 解析）: 起動時（0x439549）と 0x40B422 で `Cd_RequireDisc` が、DRIVE_CDROM 種別のドライブに `\stcc\stcc.exe` と `\stcc\data\bg\sky.bmp` があるかを確認し、無ければ「Please insert...CD」で止まる。ドライブ文字・ボリュームラベルは問わない。BGM も CD-DA（MCI cdaudio）なので、音楽トラック付き（BIN/CUE）でマウントする。将来 DLL で CD 不要化＋FLAC 再生にすれば不要になる
 - dgVoodoo2 v2.87.4 を `D:\Games\STCC_work\dgVoodoo2` に展開（Defender が誤検知する場合あり）→ `tools\wrapper.ps1 enable`
 - `tools\build.ps1 -Deploy` → `stccfix.ini` を配置 → `tools\aspect.ps1 <比率>`
 - パス前提: `D:\Games\STCC`、`D:\Games\STCC_work`、`D:\Tools\ghidra_12.1.3_PUBLIC`（違う場合は各スクリプトの引数で指定）
