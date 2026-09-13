@@ -37,6 +37,8 @@ void Startup() {
     Log("config: TriggerPedals=%d AccelAxis=%d%s BrakeAxis=%d%s PedalDeadzone=%d SteerDeadzone=%d SteerLinearity=%d",
         cfg.triggerPedals ? 1 : 0, cfg.accelAxis, cfg.accelInvert ? "(inv)" : "", cfg.brakeAxis,
         cfg.brakeInvert ? "(inv)" : "", cfg.pedalDeadzone, cfg.steerDeadzone, cfg.steerLinearity);
+    Log("config: WindowScale=%d KeepAspect=%d RememberWindowSize=%d", cfg.windowScale, cfg.keepAspect ? 1 : 0,
+        cfg.rememberWindowSize ? 1 : 0);
 
     if (cfg.logGraphics) {
         InstallDirectDrawLogging();  // 版に依存しない
@@ -50,6 +52,7 @@ void Startup() {
     }
     if (cfg.windowed) {
         ApplyPatches(kWindowedJp102, std::size(kWindowedJp102));
+        InstallWindowHooks();
     }
     if (cfg.d3dWindowedVideoMemory) {
         ApplyPatches(kD3DWindowedVideoMemoryJp102, std::size(kD3DWindowedVideoMemoryJp102));

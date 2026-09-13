@@ -24,7 +24,7 @@ namespace {
     }
 
 // data/addresses/stcc_jp-1.02.toml 参照
-STCC_RET_LOGGER(Gfx_InitDirectDraw)   // 0x435390
+// Gfx_InitDirectDraw (0x435390) は hooks_window.cpp が後処理フックを掛け、戻り値ログもそちらで出す
 STCC_RET_LOGGER(D3D_Init)             // 0x433B20
 STCC_RET_LOGGER(D3D_SelectDevice)     // 0x433DD0
 STCC_RET_LOGGER(D3D_PickTextureFormat)  // 0x434DE0
@@ -45,7 +45,6 @@ struct Target {
 
 void InstallGameTraceHooks() {
     const Target targets[] = {
-        {0x00435390, Detour_Gfx_InitDirectDraw, &g_orig_Gfx_InitDirectDraw, "Gfx_InitDirectDraw"},
         {0x00433B20, Detour_D3D_Init, &g_orig_D3D_Init, "D3D_Init"},
         {0x00433DD0, Detour_D3D_SelectDevice, &g_orig_D3D_SelectDevice, "D3D_SelectDevice"},
         {0x00434DE0, Detour_D3D_PickTextureFormat, &g_orig_D3D_PickTextureFormat, "D3D_PickTextureFormat"},

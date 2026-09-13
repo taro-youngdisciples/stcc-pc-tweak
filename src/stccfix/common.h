@@ -15,6 +15,9 @@ void Log(const char* fmt, ...);
 struct Config {
     bool windowed = true;      // g_bFullscreen の初期値を 0 にしてウィンドウで起動する
     bool d3dWindowedVideoMemory = true;  // ウィンドウ時の D3D 描画先を VIDEOMEMORY で作る（HAL デバイス作成失敗の修正）
+    int windowScale = 0;             // ウィンドウのクライアントを 640x480 の何倍にするか。0 = モニタに収まる最大の整数倍
+    bool keepAspect = true;          // ドラッグでのリサイズを 4:3 に拘束
+    bool rememberWindowSize = true;  // 利用者がリサイズした大きさを、ゲームの再初期化後も維持
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
     // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
@@ -62,6 +65,10 @@ bool ApplyPatches(const BytePatch* patches, std::size_t count);
 // exe の IAT の DDRAW!DirectDrawCreate を差し替え、以後生成される COM オブジェクトの vtable をフックする。
 // DllMain から呼んでよい（IAT 書き換えのみ）
 void InstallDirectDrawLogging();
+
+// ---------------------------------------------------------------- hooks_window.cpp
+// ウィンドウモードの窓サイズ維持と 4:3 リサイズ。jp-1.02 専用。DllMain から呼ぶ
+void InstallWindowHooks();
 
 // ---------------------------------------------------------------- hooks_game.cpp
 // ゲーム内の D3D 初期化関数（引数なし）の戻り値をログする。jp-1.02 専用。DllMain から呼ぶ

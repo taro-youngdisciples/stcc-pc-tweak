@@ -27,6 +27,10 @@ Config LoadConfig(const std::wstring& iniPath) {
     c.windowed = GetPrivateProfileIntW(L"Display", L"Windowed", c.windowed ? 1 : 0, ini) != 0;
     c.d3dWindowedVideoMemory =
         GetPrivateProfileIntW(L"Display", L"D3DWindowedVideoMemory", c.d3dWindowedVideoMemory ? 1 : 0, ini) != 0;
+    c.windowScale = static_cast<int>(GetPrivateProfileIntW(L"Display", L"WindowScale", c.windowScale, ini));
+    c.keepAspect = GetPrivateProfileIntW(L"Display", L"KeepAspect", c.keepAspect ? 1 : 0, ini) != 0;
+    c.rememberWindowSize =
+        GetPrivateProfileIntW(L"Display", L"RememberWindowSize", c.rememberWindowSize ? 1 : 0, ini) != 0;
     c.logGraphics = GetPrivateProfileIntW(L"Debug", L"LogGraphics", c.logGraphics ? 1 : 0, ini) != 0;
     c.logInput = GetPrivateProfileIntW(L"Debug", L"LogInput", c.logInput ? 1 : 0, ini) != 0;
 
