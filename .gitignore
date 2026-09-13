@@ -44,6 +44,8 @@
 # ---- ビルド生成物 ----
 /build/
 /out/
+# tools\package.ps1 のリリース zip
+/dist/
 .vs/
 *.obj
 *.pdb

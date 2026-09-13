@@ -51,7 +51,7 @@ struct Config {
     std::string inputDeviceName;  // ANSI（DIDEVICEINSTANCEA の製品名と比較）
     int inputDeviceIndex = 0;     // 0 = 一致したものすべて
     // ---- フォースフィードバック（[ForceFeedback]）
-    FfbMode ffbMode = FfbMode::Native;
+    FfbMode ffbMode = FfbMode::Off;  // 既定は off（native は現代のホイールで妙な力が出る。game は調整中）
     int ffbGain = 100;         // %。ゲームの力 100 単位を MaxForce の何 % にするか（カーブ適用後、上限で頭打ち）
     int ffbCurve = 60;         // %。入出力カーブの指数（100 = 線形、小さいほど低速の弱い力を持ち上げる）
     int ffbFadeInMs = 1500;    // 力が 1 秒以上途切れた後に再開したとき、0 から戻すまでの ms（予選の停止状態からの急な力対策）

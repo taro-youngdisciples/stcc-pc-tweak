@@ -1,0 +1,422 @@
+# stcc-pc-tweak
+
+[English](README.md) | 日本語
+
+> **作業中です。** 早期プレビュー（v0.1.0 プレリリース）です。設定や動作はまだ変わる可能性があり、
+> 当面は Issue とプルリクエストを制限しています。
+
+ダウンロード: [Releases](https://github.com/taro-youngdisciples/stcc-pc-tweak/releases)
+
+1998 年の Windows 版 **セガツーリングカーチャンピオンシップ**（Sega Touring Car Championship, STCC）向けの互換性・機能拡張 MOD です。
+オリジナルのゲームを Windows 11 で動かし、ワイドスクリーン、枠なし全画面、現代のコントローラやステアリングホイールへの対応を追加します。
+
+MOD 本体は **stccfix** という `dinput.dll` のプロキシです。ゲームは起動時に自分のフォルダにある stccfix を読み込み、
+stccfix がメモリ上でゲームにパッチを当て、DirectDraw / Direct3D / DirectInput をフックします。ディスク上の実行ファイルは一切書き換えません。
+[dgVoodoo2](#4-dgvoodoo2-の導入) と組み合わせて使う前提です。
+
+> **原盤ディスクはご自身でご用意ください。** 本プロジェクトは、ゲーム本体、ディスクイメージ、ゲームデータ、改変した実行ファイル、
+> dgVoodoo2 のいずれも含まず、配布もしません。
+
+- [機能](#機能)
+- [動作環境](#動作環境)
+- [インストール](#インストール)
+- [初回起動とおすすめ設定](#初回起動とおすすめ設定)
+- [コントローラとステアリングホイール](#コントローラとステアリングホイール)
+- [設定リファレンス](#設定リファレンス)
+- [既知の制限](#既知の制限)
+- [トラブルシューティング](#トラブルシューティング)
+- [ソースからのビルド](#ソースからのビルド)
+- [ライセンスと権利表記](#ライセンスと権利表記)
+
+## 機能
+
+| 分野 | 内容 |
+|---|---|
+| Windows 11 対応 | メニューバー付きのウィンドウで起動します。ウィンドウのまま Direct3D モードで遊べます（元のゲームではできません）。ウィンドウはモニタに収まる最大の大きさに拡大され、ゲームが画面モードを切り替えても大きさを保ちます。 |
+| ワイドスクリーン | 16:9、21:9、32:9 など任意の比率。3D は横幅いっぱいに描かれ（左右がより広く見えます）、2D の HUD は横に伸びません。レース中は HUD を左右の画面端へ寄せます。空は引き伸ばさずに広げて表示します。バンパー視点のバックミラーも正しい位置に出ます。 |
+| 全画面 | 枠なし全画面（起動時に適用）と、Windows の表示スケーリングに対応する DPI 対応。 |
+| アナログコントローラ | 現代のパッドでゲームのアナログ操作モード「Joystick」「Steering Wheel」を使えるようにします。アナログトリガーをアクセル・ブレーキにできます。ステアリングのデッドゾーンと反応カーブ。 |
+| ステアリングホイール | ゲームに見せるデバイスの選択、別々のペダル軸の割り当て、反転、デッドゾーン。フォースフィードバックは既定で off。ゲームに力を出させる試験的なモードがありますが、未完成です。 |
+| 解像度 | dgVoodoo2 と組み合わせ、Direct3D の 3D を 3413x1920 などの高解像度で描画します。 |
+
+動作確認済み: DualShock 4 互換パッド（USB / Bluetooth）、Fanatec CSL DD ＋ペダル、16:9 と 32:9 の画面・ウィンドウ、dgVoodoo2 2.87.4。
+<!-- TODO: 21:9 はゲーム内で未確認（16:9 と 32:9 は確認済み）。確認後にこの行を更新 -->
+
+## 動作環境
+
+| 項目 | 内容 |
+|---|---|
+| ゲーム | **日本版 Windows 版 v1.02** のみ対応。ディスクからインストールされるのは v1.00 で、v1.02 の更新ファイルは同じディスクに入っています。 |
+| ディスクイメージ | **音楽トラックを含む**原盤のイメージ（BIN/CUE など）を仮想 CD-ROM ドライブにマウントしておく必要があります。下記参照。 |
+| Windows | Windows 11。Windows の機能の **DirectPlay** を有効にしてください。<!-- TODO: Windows 10 は未確認 --> |
+| dgVoodoo2 | バージョン 2.87.4 で確認。公式サイトからご自身でダウンロードしてください。 |
+| DirectX | インストール不要です。ディスクの DirectX ランタイムは入れないでください。 |
+
+### ディスクイメージのマウントが必要な理由
+
+ゲームは起動時（とその後もう一度）、種類が CD-ROM のドライブに `\stcc\stcc.exe` と `\stcc\data\bg\sky.bmp` があるかを調べ、
+見つからなければ「Please insert the CD」のメッセージで止まります。ドライブ文字やボリュームラベルは問いません。
+BGM はそのドライブから CD オーディオ（CD-DA）として再生されるので、イメージには音楽トラックも必要です。
+データトラックだけのイメージでも起動はしますが、音楽は鳴りません。
+
+音楽トラック付きの BIN/CUE をマウントできる仮想ドライブソフトを使ってください。Windows 標準の「マウント」は ISO/VHD 専用で、音楽トラックは再生できません。開発では ImgDrive を使いました。
+
+### ゲームのバージョン確認
+
+1. ゲームフォルダで PowerShell を開き、次を実行します。
+   ```powershell
+   Get-FileHash .\STCC.EXE -Algorithm SHA256
+   ```
+   | バージョン | SHA-256 | サイズ |
+   |---|---|---|
+   | v1.02（対応） | `6B4E92CA0A4C156363435A3425DA5704B2E64E9EF2218CF51449F9AA42C4319D` | 1,009,152 バイト |
+   | v1.00（ディスクの `Stcc\STCC.EXE`、非対応） | `897E9AE4F33B24068EC5E207B2C6D42BC5DF2CCB28F0A0D1EF4B22852817C6CA` | 946,688 バイト |
+2. stccfix を入れて一度起動したあと、ゲームフォルダの `stccfix.log` を開きます。
+   `game version: jp-1.02` と書かれていれば OK です。`unknown` の場合、stccfix はゲームへのパッチを当てません。
+
+## インストール
+
+以下ではゲームフォルダを `D:\Games\STCC` として説明します。場所は任意です。
+<!-- TODO: C:\Program Files 配下へのインストールで問題（書き込み権限 / VirtualStore）が出るか確認。開発では D:\Games\STCC のみ検証 -->
+
+### 1. DirectPlay を有効にする
+
+Win+R で `optionalfeatures` を実行し、**レガシ コンポーネント** を開いて **DirectPlay** にチェックを入れます。
+これが無いと、ゲーム起動時に Windows から「DirectPlay が必要です」というダイアログが出ます（実行ファイルが DirectPlay をリンクしているため）。
+
+### 2. ゲームのインストール
+
+1. ディスクイメージをマウントします。
+2. ディスクの `Setup.exe` を実行し、`D:\Games\STCC` などにインストールします。
+   DirectX のインストールは行わないでください。インストール先のパスは `C:\WINDOWS\stcc.ini` に記録されます。
+   <!-- TODO: ディスク上の Setup.exe の場所と、Setup が DirectX のインストールを勧めてくるかを確認 -->
+
+### 3. v1.02 への更新
+
+1. ディスクの `D3D\updatej.exe` は、v1.02 の `STCC.EXE` が入った自己解凍形式（WinZip）のアーカイブです。
+2. 一時フォルダに展開します。
+3. インストール済みの `STCC.EXE` をバックアップしてから、展開した `STCC.EXE` で上書きします。
+4. 上記の手順で SHA-256 を確認します。
+
+<!-- TODO: 同梱の PatchInstaller.exe が Windows 11 で動くか確認。開発では STCC.EXE を手動でコピーした -->
+
+### 4. dgVoodoo2 の導入
+
+1. dgVoodoo2 を公式の入手元（<https://dege.freeweb.hu/> または <https://github.com/dege-diosg/dgVoodoo2/releases>）からダウンロードします。
+2. アーカイブ内の `MS\x86\DDraw.dll` と `MS\x86\D3DImm.dll` をゲームフォルダにコピーします。
+3. **stccfix のリリースに含まれる `dgVoodoo.conf`** をゲームフォルダにコピーします（dgVoodoo2 付属のものではありません）。
+   ウィンドウ表示、16bpp デスクトップ、メニューバーとダイアログ用の GDI フック、60fps 制限、描画解像度の固定など、このゲーム向けに設定済みです。
+
+Windows Defender などのウイルス対策ソフトが dgVoodoo2 のアーカイブを検出した例があります。[トラブルシューティング](#トラブルシューティング)を参照してください。
+
+### 5. stccfix の導入
+
+リリース zip の `dinput.dll` と `stccfix.ini` をゲームフォルダにコピーします。
+
+この時点でゲームフォルダには次のファイルがあるはずです。
+
+| ファイル | 入手元 |
+|---|---|
+| `STCC.EXE`（v1.02）とその他のゲームファイル | お手持ちのディスク |
+| `DDraw.dll`、`D3DImm.dll` | dgVoodoo2 |
+| `dgVoodoo.conf` | stccfix リリース |
+| `dinput.dll`、`stccfix.ini` | stccfix リリース |
+| `stccfix.log` | 起動のたびに stccfix が作成 |
+
+### 6. アスペクト比の設定
+
+次の 2 か所を同じ比率にそろえます。
+
+- `stccfix.ini` の `[Display]`: `AspectRatio=16:9`
+- `dgVoodoo.conf` の `[DirectX]`: `Resolution = 3413x1920`
+
+リリースのファイルは 16:9 に設定済みです。dgVoodoo の `Resolution` は描画サイズで、好みの高さに比率を掛けた値にします。
+高さはウィンドウの高さ程度、枠なし全画面ならモニタの高さが目安です。
+
+| 比率 | `AspectRatio` | `Resolution`（高さ 1920、4K でのウィンドウなど） | `Resolution`（高さ 1440） |
+|---|---|---|---|
+| 元の比率 | `4:3` | `2560x1920` | `1920x1440` |
+| 16:9 | `16:9` | `3413x1920` | `2560x1440` |
+| 21:9 | `21:9` | `4480x1920` | `3360x1440` |
+| 32:9 | `32:9` | `6827x1920` | `5120x1440` |
+
+`AspectRatio` には整数の `W:H` なら何でも書けるので、モニタの正確な比率（2560x1080 なら `64:27` など）も指定できます。
+<!-- TODO: 64:27 のような比率はコード上は動くはずだが未検証 -->
+
+**手作業の場合:** テキストエディタで両方の行を書き換えます。`stccfix.ini` は ASCII 文字だけにしてください（日本語などを書かない）。Windows が ANSI として読むためです。
+
+**スクリプトの場合（リポジトリから）:** `tools\aspect.ps1` で両方のファイルを一度に書き換えられます。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\aspect.ps1 21:9 -GameDir "D:\Games\STCC"
+powershell -ExecutionPolicy Bypass -File tools\aspect.ps1 32:9 -RenderHeight 1440 -GameDir "D:\Games\STCC"
+```
+
+`-RenderHeight` の既定は 1920、`-GameDir` の既定は `D:\Games\STCC` です。
+<!-- TODO: aspect.ps1 もリリース zip に同梱するか決める -->
+
+### 7. （任意）枠なし全画面
+
+`stccfix.ini` を次のようにします。
+
+```ini
+[Display]
+Windowed=1
+BorderlessFullscreen=1
+DpiAware=1
+AspectRatio=32:9
+```
+
+- `AspectRatio` はモニタの比率に、dgVoodoo の `Resolution` はモニタの解像度にします。
+  5120x1440 のモニタなら `tools\aspect.ps1 32:9 -RenderHeight 1440`。
+- 枠なし全画面は「枠のないウィンドウ」なので、`Windowed=1` が必要です。
+- Windows の表示スケーリングが 100% 以外なら `DpiAware=1` にしてください。
+- メニューバーは表示されません。F キーと Alt+F4 は使えます。メニューを使いたいときは `BorderlessFullscreen=0` に戻します。
+- 設定は起動時にだけ読み込まれます。ゲーム実行中の切り替えには対応していません。
+
+## 初回起動とおすすめ設定
+
+1. `STCC.EXE` を起動します。メニューバー付きのウィンドウが開きます。
+2. **Display > Direct 3D** を選びます。DirectDraw モードはソフトウェア描画を拡大しているだけで粗く、ワイドスクリーンも Direct3D が前提です。
+3. **Settings > Screen Mode > 640x480 16bit** を選びます。320x240 だと明らかにぼやけます。
+4. **F5**（Device Settings）でコントローラを選びます。[コントローラとステアリングホイール](#コントローラとステアリングホイール)を参照。
+5. **Game > Exit** または **Alt+F4** で終了します。Direct3D の選択は正常終了時に保存されます。
+
+<!-- TODO: 日本版での実際のメニュー表記を確認 -->
+
+| キー | 機能 |
+|---|---|
+| F3 | ポーズ / メニューモードの切り替え（マウスカーソルとメニューを表示） |
+| Esc | メニューモードを抜ける |
+| F5 | Device Settings（コントローラの選択） |
+| F5〜F9 | ゲームの各種設定ダイアログ <!-- TODO: F6・F7・F8・F9 がそれぞれ何を開くか記載 --> |
+| Alt+F4 | 終了 |
+
+## コントローラとステアリングホイール
+
+ゲームのコントローラの扱い:
+
+- コントローラは最大 2 台。プレイヤーごとの操作タイプは **F5 の Device Settings** で選びます。
+- F5 に出る選択肢は、Windows が報告するデバイスの種類で決まります。現代のパッドは「ゲームパッド」として報告されるため、
+  アクセル・ブレーキがデジタルの「Game Pad」しか選べません。`[Input] DeviceType` でゲームに見せる種類を変えられます。
+- 「Joystick」「Steering Wheel」モードのゲームは Y 軸 1 本を読みます（上 = アクセル、下 = ブレーキ）。
+  `[Input] TriggerPedals=1` にすると、別々の 2 軸（トリガーやペダル）からこの軸を作ります。
+
+下のブロックを `stccfix.ini` に貼り付け、同じ名前の既存のキーを置き換えてください。
+
+### DualShock 4 / PS4 互換パッド
+
+```ini
+[Input]
+DeviceType=joystick
+DeviceName=
+TriggerPedals=1
+AccelAxis=Ry
+BrakeAxis=Rx
+AccelInvert=0
+BrakeInvert=0
+PedalDeadzone=5
+SteerDeadzone=0
+SteerLinearity=100
+```
+
+ゲーム内で **F5 > Player 1 > Joystick > Next**。割り当ては既定のまま（アクセル = Stick Up、ブレーキ = Stick Down）にします。
+シフト・決定・キャンセル・視点・スタートは同じダイアログでボタンに割り当てます。
+
+これで左スティック = ステアリング、R2 = アクセル、L2 = ブレーキ（どちらもアナログ）になります。
+トリガーを両方離しているときは、左スティックの上下でもアクセル・ブレーキを操作できます。
+
+- 中央でステアリングが勝手に動く: `SteerDeadzone=3` などを試してください。中央付近が敏感すぎる: `SteerLinearity=150` などを試してください。
+- ホイールなど別のコントローラも繋いでいる場合は、`DeviceName` にパッドの名前の一部を書くと、ゲームにはパッドだけが見えます。
+  名前は `LogInput=1` にすると `stccfix.log` に出ます。
+  <!-- TODO: DS4 が DirectInput で報告する製品名を追記 -->
+
+### Fanatec CSL DD ＋ペダル
+
+```ini
+[Input]
+DeviceType=auto
+DeviceName=FANATEC#1
+TriggerPedals=1
+AccelAxis=Z
+BrakeAxis=Rz
+AccelInvert=1
+BrakeInvert=1
+PedalDeadzone=2
+SteerDeadzone=0
+SteerLinearity=100
+
+[ForceFeedback]
+Mode=off
+```
+
+ゲーム内で **F5 > Player 1 > Steering Wheel (T2) > Next**。
+
+- FanatecApp でホイールの回転角（SEN）を **240 度前後** にしてください。1080 度のままだと、ゲームはハンドルの可動範囲のごく一部しか使いません。
+- Windows には「FANATEC Wheel」が 2 台見え、2 台目は値が動きません。`DeviceName=FANATEC#1` で 1 台目だけをゲームに見せ、他のコントローラも隠します。
+- ゲームから見たペダルは クラッチ = Y、アクセル = Z、ブレーキ = Rz で、どれも離したときに最大値になるため `AccelInvert=1` と `BrakeInvert=1` にしています。
+- `Mode=off`（既定値）はゲームからフォースフィードバックを隠します。`Mode=native` では、現代のホイールに対してゲームが初期値のエフェクトを鳴らすだけなので、レース開始時に妙な力がかかります。センタリングのばね・ダンパーは FanatecApp で好みに設定してください。
+
+Fanatec ドライバ 0.53.1 ＋ FanatecApp で確認しました。<!-- TODO: ペダルがベース経由の接続か USB 単体接続かを確認 -->
+
+他のホイールは未確認です。Windows がホイールとして報告していれば `DeviceType=auto` で「Steering Wheel (T2)」が選べます。
+選べなければ `DeviceType=wheel` を試してください。ペダルの軸は[軸の調べ方](#軸の調べ方)で確認します。
+
+### フォースフィードバック（試験的・未完成）
+
+**まだおすすめしません。** Fanatec CSL DD では、力を感じるのがほぼ衝突時と非常に速いコーナーだけで、
+予選の開始時に急な力がかかることもあります。試してみたい場合以外は `Mode=off` のままにしてください。
+
+```ini
+[ForceFeedback]
+Mode=game
+MaxForce=40
+Gain=100
+Curve=60
+Invert=0
+AutoCenter=0
+HoldMs=100
+Smoothing=80
+FadeInMs=1500
+```
+
+`Mode=game` では、stccfix がフォースフィードバック対応ホイールを、ゲームが対応している 1998 年の機種
+（「DIforce2 Serial Joystick Device」）としてゲームに見せ、ゲーム自身にステアリングの反力を出させます。
+ゲームの力を `Curve` と `Gain` で変換して `MaxForce` で上限を設け、更新が止まった力を解放し（`HoldMs`）、
+変化の速さを制限し（`Smoothing`）、途切れた後はフェードインします（`FadeInMs`）。
+
+- ゲーム内で **F5 > Player 1 > Per4mer Racing Wheel > Next** を選び、ペダルの調整をやり直してください。
+  `Mode=off` に戻したら、**Steering Wheel (T2)** を選び直します。
+- **初回は必ずハンドルを握った状態で試してください。** ダイレクトドライブのホイールは非常に強い力を出せます。`MaxForce` は低めから始めます。
+- ハンドルが中央へ戻るのではなく、切った方向へさらに引っ張られる場合は `Invert=1` にします。
+- `AutoCenter=1` にすると、ゲームがホイール内蔵のセンタリングスプリングを有効にできます（`Mode=game` のときのみ関係します）。
+
+### 軸の調べ方
+
+その他のコントローラの場合:
+
+1. `stccfix.ini` で `[Debug] LogInput=1` にします。ログには stccfix で加工した後の値が出るので、一時的に `TriggerPedals=0`、`SteerDeadzone=0`、`SteerLinearity=100` にしておきます。
+2. ゲームを起動して **F5** を押し、コントローラにキーボード以外のモードを選んでダイアログを閉じます。ゲームは選択されるまでコントローラを読みません。
+3. 軸を 1 つずつ端から端まで動かします（ステアリング、各ペダルやトリガーの順に、間を少し空けて）。
+4. ゲームを終了し、ゲームフォルダの `stccfix.log` を開きます。
+   - `device ... product="..." -> cb=1` の行が、ゲームに見せたコントローラです（`-> hidden (DeviceName)` は除外されたもの）。
+   - `state X=... Y=... Z=... Rx=... Ry=... Rz=... S0=... S1=... POV=... btn=0x...` の行に、変化した値が出ます。ペダルに合わせて動いた軸がそのペダルの軸です。離したときに値が大きいなら、対応する `...Invert=1` にします。
+5. 軸名を `AccelAxis` / `BrakeAxis` に書き（`X`、`Y`、`Z`、`Rx`、`Ry`、`Rz`、S0 は `Slider0`、S1 は `Slider1`）、`TriggerPedals=1` に戻し、`LogInput=0` にします。
+
+`stccfix.log` はゲームを起動するたびに上書きされます。次に起動する前にコピーしておいてください。
+
+DirectInput 8 を使う診断ツール（このプロジェクトの `joylog` も含む）では、ゲームが DirectInput 5 で見ている軸と並びが違って見えることがあります。
+たとえば Fanatec のアクセルは DirectInput 8 では Y ですが、ゲームからは Z です。**必ず `stccfix.log` の結果を信じてください。**
+
+## 設定リファレンス
+
+設定はすべて `dinput.dll` と同じフォルダの `stccfix.ini` にあります。ファイルには ASCII 文字だけを書いてください。
+「リリース」は配布する `stccfix.ini` の値、「未指定時」はキーやファイル自体が無いときに stccfix が使う値です。
+
+### [Display]
+
+| キー | リリース | 未指定時 | 値 | 意味 |
+|---|---|---|---|---|
+| `Windowed` | `1` | `1` | 0 / 1 | 1 = メニューバー付きのウィンドウで起動。0 = 元の全画面起動（ウィンドウサイズ調整、枠なし全画面、HUD 端寄せは使えません）。 |
+| `D3DWindowedVideoMemory` | `1` | `1` | 0 / 1 | 1 = ウィンドウ時の Direct3D 描画先をビデオメモリに作る。これが無いとウィンドウで Display > Direct 3D が失敗します。 |
+| `WindowScale` | `0` | `0` | 0, 1, 2, ... | ウィンドウの大きさを 640x480 の何倍にするか（横は `AspectRatio` に合わせて広がります）。0 = モニタに収まる最大。 |
+| `KeepAspect` | `1` | `1` | 0 / 1 | 1 = ドラッグでリサイズするとき `AspectRatio` を保つ。 |
+| `AspectRatio` | `16:9` | `4:3` | `W:H` | 表示アスペクト比。4:3 以外でワイドスクリーンになります（Direct3D モード、ウィンドウまたは枠なし全画面）。dgVoodoo の `Resolution` も同じ比率に。 |
+| `WideBackground` | `extend` | `extend` | `extend` / `stretch` | ワイド時の画面幅いっぱいの背景（空）。`extend` はテクスチャをより広く見せる、`stretch` は 4:3 の背景を引き伸ばす。 |
+| `HudAnchor` | `edges` | `edges` | `edges` / `center` | ワイド時のレース HUD。`edges` は左側の HUD を左端、右側を右端へ寄せる。`center` は中央 4:3 のまま。メニューは常に中央です。 |
+| `RememberWindowSize` | `1` | `1` | 0 / 1 | 1 = ゲームがグラフィックスを再初期化しても、ドラッグで変えたウィンドウサイズを保つ。 |
+| `BorderlessFullscreen` | `0` | `0` | 0 / 1 | 1 = モニタ全体を覆う枠なしウィンドウ（メニューバーなし）。起動時のみ。`Windowed=1` が必要。dgVoodoo の `Resolution` をモニタ解像度に。 |
+| `DpiAware` | `0` | `0` | 0 / 1 | 1 = ゲームを DPI 対応にする。表示スケーリングが 100% 以外のときに使います（無いとぼやけます）。 |
+
+### [Input]
+
+| キー | リリース | 未指定時 | 値 | 意味 |
+|---|---|---|---|---|
+| `DeviceType` | `joystick` | `auto` | `auto` / `joystick` / `wheel` / `gamepad` | ゲームに報告するデバイスの種類。F5 に出る選択肢が変わります。`auto` = Windows の報告どおり、`joystick` =「Joystick」を解放、`wheel` =「Steering Wheel (T2)」を解放、`gamepad` =「Game Pad」に固定。 |
+| `DeviceName` | （空） | （空） | 文字列、または `文字列#N` | 名前にこの文字列を含むコントローラだけをゲームに見せる（大文字小文字を区別しない）。`#N` は一致したうち N 台目だけ。空 = すべて。 |
+| `TriggerPedals` | `1` | `0` | 0 / 1 | 1 = `AccelAxis` と `BrakeAxis` からゲームのアクセル/ブレーキ用 Y 軸を作る。両方離しているときはパッドのスティックの Y をそのまま通す（ホイールでは通さない）。 |
+| `AccelAxis` | `Ry` | `Ry` | `X` `Y` `Z` `Rx` `Ry` `Rz` `Slider0` `Slider1` | アクセルに使う軸。 |
+| `BrakeAxis` | `Rx` | `Rx` | 同上 | ブレーキに使う軸。 |
+| `AccelInvert` | `0` | `0` | 0 / 1 | 1 = アクセルの軸が離したときに最大値になる（ホイールのペダルに多い）。 |
+| `BrakeInvert` | `0` | `0` | 0 / 1 | ブレーキについて同上。 |
+| `PedalDeadzone` | `5` | `5` | % | ペダル/トリガーの踏み始めで無視する量。 |
+| `SteerDeadzone` | `0` | `0` | % | ステアリング（X 軸）中央の遊び。 |
+| `SteerLinearity` | `100` | `100` | %（最小 10） | ステアリングの反応カーブ。100 = 線形、150 = 中央付近が穏やか、200 = さらに穏やか。 |
+
+### [ForceFeedback]
+
+| キー | リリース | 未指定時 | 値 | 意味 |
+|---|---|---|---|---|
+| `Mode` | `off` | `off` | `off` / `native` / `game` | `off` = ゲームからフォースフィードバックを隠す。`native` = ゲームに任せる（1998 年当時の対応機種でしか正しく動きません）。`game` = 試験的。[フォースフィードバック](#フォースフィードバック試験的未完成)を参照。 |
+| `MaxForce` | `40` | `40` | 0〜100 | デバイスの最大の力に対する上限の割合（`Mode=game`）。 |
+| `Gain` | `100` | `100` | % | ゲーム内の強い力のときに `MaxForce` の何 % に達するか（`Mode=game`）。 |
+| `Curve` | `60` | `60` | %、10〜300 | 反応カーブ。100 = 線形、小さいほど低速の弱い力を強める（`Mode=game`）。 |
+| `Invert` | `0` | `0` | 0 / 1 | 1 = 力の向きを反転（`Mode=game`）。 |
+| `AutoCenter` | `0` | `0` | 0 / 1 | 1 = デバイス内蔵のセンタリングスプリングをゲームが有効にするのを許可（`Mode=game`）。 |
+| `HoldMs` | `100` | `100` | ms | ゲームが更新しなくなった力を、この時間の後に解放（`Mode=game`）。 |
+| `Smoothing` | `80` | `80` | ms | 0 から `MaxForce` まで変化させる時間。0 = なし（`Mode=game`）。 |
+| `FadeInMs` | `1500` | `1500` | ms | 力が 1 秒以上途切れた後、この時間をかけて戻す。0 = なし（`Mode=game`）。 |
+
+### [Debug]
+
+ログはすべてゲームフォルダの `stccfix.log` に出ます。問題を調べるとき以外は 0 のままにしてください。ログを有効にするとゲームが重くなったり、ログが非常に大きくなったりします。
+
+| キー | リリース | 未指定時 | 意味 |
+|---|---|---|---|
+| `LogGraphics` | `0` | `0` | DirectDraw / Direct3D の呼び出しと、ゲームの Direct3D 初期化の結果を記録。 |
+| `LogInput` | `0` | `0` | DirectInput のデバイス、軸の設定、コントローラの状態変化を記録。 |
+| `LogWindow` | `0` | `0` | ウィンドウサイズの変化を記録。 |
+
+## 既知の制限
+
+- **全画面は起動時にだけ適用されます。** ゲーム実行中のウィンドウ ⇔ 枠なし全画面の切り替えには対応していません。
+- **メニュー、タイトル画面などレース以外の画面は中央に 4:3 のまま**表示され、左右は黒になります。
+- **ワイド時、画面の端で物体（観客席など）が急に現れることがあります。** ゲームが 4:3 の視野を前提に描画対象を決めているためです。路面の継ぎ目がわずかに見えることもあります。
+- **HUD や文字のスプライトは低解像度**の 640x480 素材を拡大したものです。
+- **ワイドスクリーンには Direct3D モードと `Windowed=1` が必要です。** DirectDraw モードは従来どおり 4:3 のソフトウェア描画です。
+- **Bluetooth 接続の DualShock 4 は、Steam の起動中にプレイ中に切断されることがあります。** テストでは Steam を終了すると起きませんでした。
+  <!-- TODO: Steam の PlayStation コントローラ対応を OFF にするだけで解消するか確認 -->
+- **ゲームは切断されたコントローラを再検出しません。** 再接続したあと、F5 を開いて選択を確定し直してください。
+- **フォースフィードバックは未完成です。** `Mode=off`（既定値）で使ってください。`Mode=game` は試験的なものです。
+- 対応しているのは日本版 v1.02 の実行ファイルだけです。
+- ディスクイメージのマウントは引き続き必要です。
+- 高リフレッシュレートの画面でゲームが速くなりすぎないよう、`dgVoodoo.conf` で 60fps に制限しています（`FPSLimit = 60`）。この設定は変えないでください。
+
+## トラブルシューティング
+
+まずはゲームフォルダ（`dinput.dll` と同じ場所）の `stccfix.log` を確認してください。起動のたびに作り直され、読み込んだ設定、判定したゲームのバージョン、当てたパッチ、組み込んだフックが記録されます。
+ゲームを起動しても `stccfix.log` ができない場合は `dinput.dll` が読み込まれていません。`STCC.EXE` と同じフォルダにあるか確認してください。
+
+| 症状 | 対処 |
+|---|---|
+| 「Please insert the CD」と出る | ディスクイメージを CD-ROM ドライブとしてマウントしてください。`\stcc\stcc.exe` が入っている必要があります。音楽を鳴らすには音楽トラック付き（BIN/CUE）のイメージを使います。 |
+| DirectPlay を求められる | DirectPlay を有効にしてください。[インストールの手順 1](#1-directplay-を有効にする) を参照。 |
+| 画面が緑一色になる | `dgVoodoo.conf` に `DesktopBitDepth = 16` が必要です。stccfix リリースの `dgVoodoo.conf` を、`DDraw.dll` と同じゲームフォルダに置いてください。 |
+| メニューバーや F5 のダイアログが見えない | リリースの `dgVoodoo.conf`（`SystemHookFlags = gdi`）と `Windowed=1` を使ってください。`BorderlessFullscreen=1` のときはメニューバーを意図的に隠しています。 |
+| 「Direct3Dモードでは起動できません。」と出る | `D3DWindowedVideoMemory=1` にしてください。その後も毎回起動できない場合は、保存された Direct3D の選択（`STCCD3D.DAT`）をゲームフォルダから別の場所へ移すと DirectDraw に戻ります。<!-- TODO: STCCD3D.DAT が書き込まれる場所を確認 --> |
+| `stccfix.log` に `game version: unknown` と出る | v1.02 に更新し、SHA-256 を確認してください。[ゲームのバージョン確認](#ゲームのバージョン確認)を参照。 |
+| ワイドにならない | Display > Direct 3D を選び、`Windowed=1`、`AspectRatio` を 4:3 以外にしてください。有効になるとログに `widescreen: render surface` の行が出ます。 |
+| 画面が横に伸びる・縮む | `stccfix.ini` の `AspectRatio` と `dgVoodoo.conf` の `Resolution` の比率が合っていません。 |
+| 画面が粗い・ぼやける | Display > Direct 3D、Settings > Screen Mode 640x480 16bit にし、dgVoodoo の `Resolution` を大きくしてください。表示スケーリングを使っているなら `DpiAware=1` にします。 |
+| F5 で「Keyboard」と「Game Pad」しか選べない | パッドなら `DeviceType=joystick`、ホイールなら `auto` か `wheel` にしてください。 |
+| 違うコントローラが使われる / ホイールが 2 台見える | `DeviceName` を設定してください（例: `FANATEC#1`）。 |
+| ペダルを離しているのに加速・減速する | `AccelInvert=1` / `BrakeInvert=1` にするか、[軸の調べ方](#軸の調べ方)で軸を確認してください。 |
+| コントローラが効かなくなった | 切断されています。再接続してから F5 を開き直してください。 |
+| レース開始時にハンドルに妙な力がかかる | `[ForceFeedback] Mode=off`（既定値）にしてください。 |
+| ハンドルが切った方向へ引っ張られる（`Mode=game`） | `Invert=1` にしてください。 |
+| Windows Defender が dgVoodoo2 のアーカイブを検出する | dgVoodoo2 2.87.4 が `Trojan:Win32/Kepavll!rfn` として検出された例があります。誤検知と報告されていますが、確認はされていません。dgVoodoo2 は必ず公式の入手元からダウンロードし、許可するかどうかはご自身で判断してください。 |
+
+プレビュー期間中は Issue とプルリクエストを制限しています。今後、不具合を報告していただく際は `stccfix.log` を添付してください。
+
+## ソースからのビルド
+
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) を参照してください（英語）。
+
+## ライセンスと権利表記
+
+- stcc-pc-tweak（stccfix）は [MIT ライセンス](LICENSE) で公開しています。
+- [MinHook](https://github.com/TsudaKageyu/minhook)（BSD 2-Clause ライセンス）を含みます。[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
+- dgVoodoo2 は作者による別の製品で、本プロジェクトには含まれず、独自のライセンスに従います。
+- **本プロジェクトにはゲームの一部も含まれていません。** 実行ファイル（オリジナル・改変版とも）、ディスクイメージ、音楽、画像などのゲームデータは一切含みません。原盤ディスクをお持ちであることが前提です。
+- ゲームには実在するライセンス車両やブランドが登場します。それらの権利はすべて各権利者に帰属し、本プロジェクトにはゲーム由来のものは何も含まれていません。
+- 本プロジェクトは SEGA とは一切関係がなく、SEGA による承認や支援を受けたものではありません。「SEGA」「Sega Touring Car Championship」は各権利者の商標です。その他の商標もすべて各権利者に帰属します。

@@ -309,6 +309,17 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
   - 自動テスト: スクラッチの PowerShell（起動→CopyFromScreen→keybd_event→終了）で確認できた。今後も表示系の確認に使える
 - 残課題（ホイール）: FFB の自前実装（テレメトリ方式）、Fanatec の SEN をゲーム別プロファイルにするか DLL に SteerGain を持つか
 
+### FFB の試み（2026-09-13 夜、未完成・既定 off）
+- `[ForceFeedback] Mode=off|native|game`（既定 off）。game は FF 対応デバイスを "DIforce2 Serial Joystick Device"（種別コード 8）に見せる。コード 3（SideWinder FF Pro）は F5 で「SideWinder 3D Pro Type」＝ジョイスティック扱いになり、保存済みの T2 と合わずホイールが読まれなくなった。コード 8 は「Per4mer Racing Wheel」で選べる
+- ゲームの力: 整数値 ×40000、不定期（毎秒 2〜30 回、数秒来ないことも）、元は 30ms の単発エフェクト。走行中の値は低速 1〜10、250km/h 超のカーブで 50〜147、予選の停止状態から約 −49
+- stccfix の加工: 目標値として受け、GetDeviceState から毎フレーム送る（無限長の ConstantForce 1 本）。units/100 → Curve → Gain → MaxForce、HoldMs で解放、Smoothing で変化率制限、途切れ後 FadeInMs
+- ユーザー評価: 当初は 0/最大の二極化と衝撃の残留（尺度 100 倍ずれ・無限長）→ 修正後も「ほぼ衝突時だけ」「予選開始の衝撃は変わらず」→ **いったん off で打ち切り**。次はメモリから車速・横 G・ステア角を読むテレメトリ方式で作り直す想定
+
+### 公開準備（2026-09-13 夜）
+- 公開名 **stcc-pc-tweak**（GitHub taro-youngdisciples/stcc-pc-tweak）、MIT（taro-youngdisciples）、履歴ごと公開、プレリリース v0.1.0、当面インタラクション制限（collaborators_only）
+- コミットの作者メールは公開前に GitHub noreply へ書き換える（ローカル git 設定も noreply）
+- 説明書: README.md（英）/ README.ja.md / docs/DEVELOPMENT.md / LICENSE / THIRD_PARTY_NOTICES.md。リリース zip は `tools\package.ps1 -Version x.y.z`（dll, ini, dgVoodoo.conf, README×2, LICENSE, NOTICES のみ）
+
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
 - ツール: Git、VS Build Tools（C++ x86）、Python 3.13 + `.venv`（`tools\requirements.txt`）。Ghidra + JDK 21 は解析が必要になったときだけ

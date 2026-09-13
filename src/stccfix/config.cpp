@@ -30,6 +30,7 @@ bool GraphicsHooksNeeded(const Config& c) {
 }
 
 bool InputHooksNeeded(const Config& c) {
+    // FFB を隠す（off）のも加工なので、native 以外はフックが要る
     return c.logInput || c.inputDeviceSubtype != 0 || !c.inputDeviceName.empty() || c.ffbMode != FfbMode::Native ||
            c.triggerPedals ||
            c.steerDeadzone > 0 || c.steerLinearity != 100;
@@ -89,9 +90,9 @@ Config LoadConfig(const std::wstring& iniPath) {
     }
 
     wchar_t ffb[16];
-    GetPrivateProfileStringW(L"ForceFeedback", L"Mode", L"native", ffb, static_cast<DWORD>(std::size(ffb)), ini);
-    if (_wcsicmp(ffb, L"off") == 0) {
-        c.ffbMode = FfbMode::Off;
+    GetPrivateProfileStringW(L"ForceFeedback", L"Mode", L"off", ffb, static_cast<DWORD>(std::size(ffb)), ini);
+    if (_wcsicmp(ffb, L"native") == 0) {
+        c.ffbMode = FfbMode::Native;
     } else if (_wcsicmp(ffb, L"game") == 0) {
         c.ffbMode = FfbMode::Game;
     }
