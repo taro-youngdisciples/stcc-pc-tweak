@@ -44,6 +44,9 @@ Config LoadConfig(const std::wstring& iniPath) {
     c.keepAspect = GetPrivateProfileIntW(L"Display", L"KeepAspect", c.keepAspect ? 1 : 0, ini) != 0;
     c.rememberWindowSize =
         GetPrivateProfileIntW(L"Display", L"RememberWindowSize", c.rememberWindowSize ? 1 : 0, ini) != 0;
+    c.borderlessFullscreen =
+        GetPrivateProfileIntW(L"Display", L"BorderlessFullscreen", c.borderlessFullscreen ? 1 : 0, ini) != 0;
+    c.dpiAware = GetPrivateProfileIntW(L"Display", L"DpiAware", c.dpiAware ? 1 : 0, ini) != 0;
     wchar_t aspect[16];
     GetPrivateProfileStringW(L"Display", L"AspectRatio", L"4:3", aspect, static_cast<DWORD>(std::size(aspect)), ini);
     int aw = 0;

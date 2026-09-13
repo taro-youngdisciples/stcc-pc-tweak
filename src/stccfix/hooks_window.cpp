@@ -29,6 +29,15 @@ int g_userClientW = 0;    // 利用者がリサイズしたクライアントサ
 int g_userClientH = 0;
 bool g_inSizeMove = false;
 
+// 枠なし全画面（ゲームはウィンドウモードのまま、枠とメニューバーを外してモニタ全体を覆う）。
+// 起動時の設定でだけ有効にする: 実行中に窓表示から広げても dgVoodoo の表示先が元の大きさのまま追従しない
+// （2026-09-13 に Alt+Enter 切り替えを試して確認。縮めるのは追従する）
+bool g_borderless = false;
+bool g_styleSaved = false;  // 窓表示に戻すための元のスタイルとメニューを退避済みか
+LONG g_savedStyle = 0;
+LONG g_savedExStyle = 0;
+HMENU g_savedMenu = nullptr;
+
 // 640x480 への要求を差し替えた少し後に、利用者のリサイズと同じ通知をゲームへ届け直すためのタイマー
 constexpr UINT_PTR kNudgeTimerId = 0x53545743;  // 'STWC'
 constexpr UINT kNudgeDelayMs = 300;
@@ -44,6 +53,24 @@ BOOL WINAPI Hook_SetWindowPos(HWND hwnd, HWND after, int x, int y, int cx, int c
         Log("window: SetWindowPos(%d,%d %dx%d flags=0x%X) caller=%p", x, y, cx, cy, flags, _ReturnAddress());
     }
     return g_origSetWindowPos(hwnd, after, x, y, cx, cy, flags);
+}
+
+// 枠なし全画面中にゲーム（MFC）がメニューを付け直すと、メニューバーが画面上端に出てクライアントが縮む。
+// 付け直しは保留して、窓表示に戻すときに付ける
+using SetMenuFn = BOOL(WINAPI*)(HWND, HMENU);
+SetMenuFn g_origSetMenu = nullptr;
+bool g_inStyleChange = false;  // SetBorderlessStyle 自身の SetMenu は通す
+
+BOOL WINAPI Hook_SetMenu(HWND hwnd, HMENU menu) {
+    if (g_borderless && !g_inStyleChange && menu && hwnd && hwnd == g_hwnd) {
+        g_savedMenu = menu;
+        static LONG logged = 0;
+        if (InterlockedIncrement(&logged) <= 5) {
+            Log("window: SetMenu(%p) deferred while borderless, caller=%p", static_cast<void*>(menu), _ReturnAddress());
+        }
+        return TRUE;
+    }
+    return g_origSetMenu(hwnd, menu);
 }
 
 BOOL WINAPI Hook_MoveWindow(HWND hwnd, int x, int y, int cx, int cy, BOOL repaint) {
@@ -76,8 +103,22 @@ int ClientWidthForHeight(int ch) {
     return (ch * cfg.aspectW + cfg.aspectH / 2) / cfg.aspectH;
 }
 
+RECT MonitorRect(HWND hwnd) {
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+    return mi.rcMonitor;
+}
+
 void DesiredClientSize(HWND hwnd, int* cw, int* ch) {
     const Config& cfg = GetConfig();
+    if (g_borderless) {
+        // 比率が合わないモニタでも dgVoodoo（ScalingMode=stretched_ar）が黒帯で比率を保つ
+        const RECT m = MonitorRect(hwnd);
+        *cw = m.right - m.left;
+        *ch = m.bottom - m.top;
+        return;
+    }
     if (cfg.rememberWindowSize && g_userClientW > 0) {
         *cw = g_userClientW;
         *ch = g_userClientH;
@@ -102,7 +143,57 @@ void DesiredClientSize(HWND hwnd, int* cw, int* ch) {
     *cw = ClientWidthForHeight(*ch);
 }
 
+// 枠なし全画面用に枠とメニューバーを外す / 窓表示用に元へ戻す
+void SetBorderlessStyleImpl(HWND hwnd, bool on);
+void SetBorderlessStyle(HWND hwnd, bool on) {
+    g_inStyleChange = true;
+    SetBorderlessStyleImpl(hwnd, on);
+    g_inStyleChange = false;
+}
+
+void SetBorderlessStyleImpl(HWND hwnd, bool on) {
+    if (on) {
+        if (!g_styleSaved) {
+            g_savedStyle = GetWindowLongA(hwnd, GWL_STYLE);
+            g_savedExStyle = GetWindowLongA(hwnd, GWL_EXSTYLE);
+            g_savedMenu = GetMenu(hwnd);
+            g_styleSaved = true;
+        }
+        SetWindowLongA(hwnd, GWL_STYLE,
+                       g_savedStyle & ~static_cast<LONG>(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
+        SetWindowLongA(hwnd, GWL_EXSTYLE,
+                       g_savedExStyle & ~static_cast<LONG>(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME | WS_EX_STATICEDGE));
+        if (GetMenu(hwnd)) {
+            SetMenu(hwnd, nullptr);  // メニューは破棄しない（窓表示で戻す）
+        }
+    } else if (g_styleSaved) {
+        SetWindowLongA(hwnd, GWL_STYLE, g_savedStyle);
+        SetWindowLongA(hwnd, GWL_EXSTYLE, g_savedExStyle);
+        if (!GetMenu(hwnd) && g_savedMenu) {
+            SetMenu(hwnd, g_savedMenu);
+        }
+        g_styleSaved = false;
+    }
+}
+
 void ApplyWindowSize(HWND hwnd) {
+    if (g_borderless) {
+        if (IsZoomed(hwnd)) {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        SetBorderlessStyle(hwnd, true);
+        const RECT m = MonitorRect(hwnd);
+        g_applying = true;
+        SetWindowPos(hwnd, HWND_TOP, m.left, m.top, m.right - m.left, m.bottom - m.top,
+                     SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        g_applying = false;
+        RECT client{};
+        GetClientRect(hwnd, &client);
+        Log("window: borderless fullscreen, client %ldx%ld", client.right, client.bottom);
+        return;
+    }
+    SetBorderlessStyle(hwnd, false);
+
     int cw = 0;
     int ch = 0;
     DesiredClientSize(hwnd, &cw, &ch);
@@ -188,7 +279,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // （最大化や利用者のドラッグなど、他の大きさへの変更には触れない）。
                 // 幅が狭いとメニューバーが折り返して高さが変わるので、判定は幅を主に使う
                 auto* pos = reinterpret_cast<WINDOWPOS*>(lp);
-                if (g_hwnd == hwnd && !g_applying && pos && !(pos->flags & SWP_NOSIZE)) {
+                if (g_borderless && g_hwnd == hwnd && !g_applying && pos &&
+                    (pos->flags & (SWP_NOSIZE | SWP_NOMOVE)) != (SWP_NOSIZE | SWP_NOMOVE)) {
+                    // 枠なし全画面では利用者はサイズを変えられないので、位置・サイズの変更はすべてゲーム由来。
+                    // ゲームは枠とメニュー込みで窓サイズを計算するので、スタイルからの逆算に頼らずモニタ全体へ固定する
+                    const RECT m = MonitorRect(hwnd);
+                    if (pos->x != m.left || pos->y != m.top || pos->cx != m.right - m.left || pos->cy != m.bottom - m.top) {
+                        Log("window: game requested %d,%d %dx%d while borderless, kept fullscreen", pos->x, pos->y,
+                            pos->cx, pos->cy);
+                        pos->x = m.left;
+                        pos->y = m.top;
+                        pos->cx = m.right - m.left;
+                        pos->cy = m.bottom - m.top;
+                        pos->flags &= ~static_cast<UINT>(SWP_NOSIZE | SWP_NOMOVE);
+                        SetTimer(hwnd, kNudgeTimerId, kNudgeDelayMs, nullptr);
+                    }
+                } else if (g_hwnd == hwnd && !g_applying && pos && !(pos->flags & SWP_NOSIZE)) {
                     auto matchesMode = [&](int cw, int ch) {
                         const SIZE s = WindowSizeForClient(hwnd, cw, ch);
                         return std::abs(pos->cx - s.cx) <= 2 && pos->cy >= s.cy - 2 && pos->cy <= s.cy + 80;
@@ -255,6 +361,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return CallWindowProcA(g_origWndProc, hwnd, msg, wp, lp);
 }
 
+void EnsureSubclassed(HWND hwnd) {
+    if (hwnd != g_hwnd) {
+        g_hwnd = hwnd;
+        g_origWndProc = reinterpret_cast<WNDPROC>(
+            static_cast<LONG_PTR>(SetWindowLongA(hwnd, GWL_WNDPROC, static_cast<LONG>(reinterpret_cast<LONG_PTR>(&WndProc)))));
+        Log("window: subclassed hwnd=%p", static_cast<void*>(hwnd));
+    }
+}
+
+// DirectDraw 初期化の前: dgVoodoo は SetCooperativeLevel 時点の窓の形（枠・メニューバー）で表示先を決め、
+// 後から枠を外しても追従しない（メニューバーの跡が残る）。枠なし全画面は初期化の前に形を整えておく
+void __cdecl OnBeforeGfxInitDirectDraw() {
+    if (!g_borderless || GameIsFullscreen()) {
+        return;
+    }
+    HWND hwnd = GameWindow();
+    if (!hwnd) {
+        return;
+    }
+    EnsureSubclassed(hwnd);
+    ApplyWindowSize(hwnd);
+}
+
 void __cdecl OnGfxInitDirectDraw(DWORD ret) {
     if (GetConfig().logGraphics) {
         Log("[game] Gfx_InitDirectDraw() -> 0x%lX", ret);
@@ -266,17 +395,17 @@ void __cdecl OnGfxInitDirectDraw(DWORD ret) {
     if (!hwnd) {
         return;
     }
-    if (hwnd != g_hwnd) {
-        g_hwnd = hwnd;
-        g_origWndProc = reinterpret_cast<WNDPROC>(
-            static_cast<LONG_PTR>(SetWindowLongA(hwnd, GWL_WNDPROC, static_cast<LONG>(reinterpret_cast<LONG_PTR>(&WndProc)))));
-        Log("window: subclassed hwnd=%p", static_cast<void*>(hwnd));
-    }
+    EnsureSubclassed(hwnd);
     ApplyWindowSize(hwnd);
 }
 
-// 引数なし関数の後処理フック。元関数を呼ぶまでレジスタに触れない
+// 引数なし関数の前後処理フック。前処理はレジスタとフラグを保存して呼ぶ
 __declspec(naked) void Detour_GfxInitDirectDraw() {
+    __asm pushad
+    __asm pushfd
+    __asm call OnBeforeGfxInitDirectDraw
+    __asm popfd
+    __asm popad
     __asm call dword ptr [g_origGfxInit]
     __asm push eax
     __asm push eax
@@ -289,6 +418,7 @@ __declspec(naked) void Detour_GfxInitDirectDraw() {
 }  // namespace
 
 void InstallWindowHooks() {
+    g_borderless = GetConfig().borderlessFullscreen;
     MH_STATUS st = MH_Initialize();
     if (st != MH_OK && st != MH_ERROR_ALREADY_INITIALIZED) {
         Log("MH_Initialize 失敗: %s", MH_StatusToString(st));
@@ -301,17 +431,20 @@ void InstallWindowHooks() {
     }
     Log("window hook Gfx_InitDirectDraw @0x%08X: %s", static_cast<unsigned>(kGfxInitDirectDraw), MH_StatusToString(st));
 
+    // user32 は exe の静的 import なのでロード済み
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    auto hookApi = [&](const char* name, LPVOID detour, LPVOID* orig) {
+        LPVOID fn = user32 ? static_cast<LPVOID>(GetProcAddress(user32, name)) : nullptr;
+        MH_STATUS s = fn ? MH_CreateHook(fn, detour, orig) : MH_ERROR_FUNCTION_NOT_FOUND;
+        if (s == MH_OK) {
+            s = MH_EnableHook(fn);
+        }
+        Log("window hook user32!%s: %s", name, MH_StatusToString(s));
+    };
+    if (g_borderless) {
+        hookApi("SetMenu", &Hook_SetMenu, reinterpret_cast<LPVOID*>(&g_origSetMenu));
+    }
     if (GetConfig().logWindow) {
-        // user32 は exe の静的 import なのでロード済み
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        auto hookApi = [&](const char* name, LPVOID detour, LPVOID* orig) {
-            LPVOID fn = user32 ? static_cast<LPVOID>(GetProcAddress(user32, name)) : nullptr;
-            MH_STATUS s = fn ? MH_CreateHook(fn, detour, orig) : MH_ERROR_FUNCTION_NOT_FOUND;
-            if (s == MH_OK) {
-                s = MH_EnableHook(fn);
-            }
-            Log("window hook user32!%s: %s", name, MH_StatusToString(s));
-        };
         hookApi("SetWindowPos", &Hook_SetWindowPos, reinterpret_cast<LPVOID*>(&g_origSetWindowPos));
         hookApi("MoveWindow", &Hook_MoveWindow, reinterpret_cast<LPVOID*>(&g_origMoveWindow));
     }

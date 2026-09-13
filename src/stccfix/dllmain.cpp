@@ -39,8 +39,20 @@ void Startup() {
     Log("config: TriggerPedals=%d AccelAxis=%d%s BrakeAxis=%d%s PedalDeadzone=%d SteerDeadzone=%d SteerLinearity=%d",
         cfg.triggerPedals ? 1 : 0, cfg.accelAxis, cfg.accelInvert ? "(inv)" : "", cfg.brakeAxis,
         cfg.brakeInvert ? "(inv)" : "", cfg.pedalDeadzone, cfg.steerDeadzone, cfg.steerLinearity);
-    Log("config: WindowScale=%d KeepAspect=%d RememberWindowSize=%d", cfg.windowScale, cfg.keepAspect ? 1 : 0,
-        cfg.rememberWindowSize ? 1 : 0);
+    Log("config: WindowScale=%d KeepAspect=%d RememberWindowSize=%d BorderlessFullscreen=%d DpiAware=%d",
+        cfg.windowScale, cfg.keepAspect ? 1 : 0, cfg.rememberWindowSize ? 1 : 0, cfg.borderlessFullscreen ? 1 : 0,
+        cfg.dpiAware ? 1 : 0);
+
+    if (cfg.dpiAware) {
+        // ゲームが窓を作る前に宣言する。SetProcessDpiAwarenessContext は Win10 1703+（無ければ旧 API）
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        using SetCtxFn = BOOL(WINAPI*)(HANDLE);
+        auto setCtx = user32 ? reinterpret_cast<SetCtxFn>(GetProcAddress(user32, "SetProcessDpiAwarenessContext")) : nullptr;
+        const BOOL ok = setCtx ? setCtx(reinterpret_cast<HANDLE>(-4))  // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+                               : (user32 ? SetProcessDPIAware() : FALSE);
+        Log("dpi: %s -> %d (err %lu)", setCtx ? "SetProcessDpiAwarenessContext(PMv2)" : "SetProcessDPIAware", ok,
+            ok ? 0UL : GetLastError());
+    }
 
     Log("config: AspectRatio=%d:%d (widescreen x scale %.4f)", cfg.aspectW, cfg.aspectH, WidescreenScale(cfg));
     if (GraphicsHooksNeeded(cfg)) {

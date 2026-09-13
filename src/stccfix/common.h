@@ -18,6 +18,11 @@ struct Config {
     int windowScale = 0;             // ウィンドウのクライアントを 640x480 の何倍にするか。0 = モニタに収まる最大の整数倍
     bool keepAspect = true;          // ドラッグでのリサイズを 4:3 に拘束
     bool rememberWindowSize = true;  // 利用者がリサイズした大きさを、ゲームの再初期化後も維持
+    // ウィンドウモードのまま枠とメニューバーを外してモニタ全体を覆う（起動時のみ。実行中の切り替えは dgVoodoo が追従しない）
+    bool borderlessFullscreen = false;
+    // プロセスを DPI 対応（Per-Monitor V2）にする。無いと 125% 等のスケーリングで窓が仮想座標になり、
+    // Windows が引き伸ばす（5120x1440 のモニタで窓が 4096x1152 扱い）
+    bool dpiAware = false;
     // 表示アスペクト比。4:3 以外なら Direct3D の描画先を横長に作ってワイド化する（hooks_ddraw.cpp）:
     // 3D の TL 頂点は右へずらし、ゲームの 2D 書き込みは中央 4:3 に置くので HUD は伸びない。窓もこの比率にする
     int aspectW = 4;
