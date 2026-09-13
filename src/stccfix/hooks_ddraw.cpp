@@ -165,7 +165,7 @@ HRESULT STDMETHODCALLTYPE DD2_CreateSurface(IDirectDraw2* self, LPDDSURFACEDESC 
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDraw2*, LPDDSURFACEDESC, LPDIRECTDRAWSURFACE*, IUnknown*)>(self, 6);
 
     // ワイド化: Direct3D の描画先（主画面以外で 3DDEVICE 付き、640x480 / 320x240）だけを横に広げて作る
-    DDSURFACEDESC wideDesc;
+    DDSURFACEDESC wideDesc{};
     LPDDSURFACEDESC pass = desc;
     LONG offset = 0;
     if (desc && (desc->dwFlags & DDSD_WIDTH) && (desc->dwFlags & DDSD_HEIGHT) &&
