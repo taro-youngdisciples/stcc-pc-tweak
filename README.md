@@ -7,6 +7,11 @@ English | [日本語](README.ja.md)
 
 Download: [Releases](https://github.com/taro-youngdisciples/stcc-pc-tweak/releases)
 
+> **Built with AI assistance.** This project was developed with extensive help from **Claude**, Anthropic's AI
+> assistant, used through Claude Code. Most of the reverse engineering analysis, the DLL source code, the tools and
+> this documentation were written by Claude, under the direction of the project owner, who set the goals, made the
+> decisions and tested everything on real hardware. See [AI assistance](#ai-assistance).
+
 A compatibility and enhancement mod for the 1998 Windows version of **Sega Touring Car Championship** (STCC).
 It makes the original game run on Windows 11 and adds widescreen, borderless fullscreen and modern controller and
 steering wheel support.
@@ -27,6 +32,7 @@ It is designed to be used together with [dgVoodoo2](#4-install-dgvoodoo2).
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Building from source](#building-from-source)
+- [AI assistance](#ai-assistance)
 - [License and legal](#license-and-legal)
 
 ## Features
@@ -429,6 +435,20 @@ During the preview, issues and pull requests are limited. When reporting a probl
 ## Building from source
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+## AI assistance
+
+This project is openly an AI-assisted work. It was built in conversation with **Claude** (Anthropic), running as
+Claude Code on the owner's PCs:
+
+- **Claude** analysed the game executable (Ghidra headless scripts, disassembly with capstone, log analysis), designed
+  and wrote the `stccfix` DLL and the tools, diagnosed problems from logs and screenshots, and wrote this documentation.
+- **The project owner** decided what to build and how to publish it, provided the original disc and the hardware
+  (PCs, displays, controllers, the Fanatec wheel), ran every in-game test and reported the results, and reviewed the
+  changes.
+
+Commits written this way carry a `Co-Authored-By: Claude` trailer. Findings may contain mistakes; reports that
+correct them are welcome once issues are open.
 
 ## License and legal
 

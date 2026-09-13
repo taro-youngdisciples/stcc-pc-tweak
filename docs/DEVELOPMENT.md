@@ -6,6 +6,10 @@ Player documentation is in [README.md](../README.md) / [README.ja.md](../README.
 
 Source comments and the internal handoff notes (`HANDOFF.md`) are mostly in Japanese.
 
+The code, tools, reverse engineering notes and documentation were written with extensive assistance from Claude
+(Anthropic) through Claude Code, directed and tested on real hardware by the project owner. `HANDOFF.md` is the
+working log of those sessions. See [AI assistance](../README.md#ai-assistance).
+
 - [Repository layout](#repository-layout)
 - [Prerequisites](#prerequisites)
 - [Getting the source](#getting-the-source)
