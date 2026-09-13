@@ -12,6 +12,14 @@ void LogInit(const std::wstring& path);
 void Log(const char* fmt, ...);
 
 // ---------------------------------------------------------------- config.cpp
+// フォースフィードバックの扱い
+//  Off    = DIDC_FORCEFEEDBACK を隠し、ゲームに FFB を作らせない
+//  Native = ゲームのまま（1998 年の既知機種以外では初期値のエフェクトを鳴らすだけ）
+//  Game   = FF 対応デバイスを "DIforce2 Serial Joystick Device"（種別コード 8、F5 では Per4mer Racing Wheel）に見せ、
+//           ゲームのステア反力を出させる。
+//           強さは Gain/MaxForce で加工し、30ms で途切れるエフェクトを連続再生にする
+enum class FfbMode { Off, Native, Game };
+
 struct Config {
     bool windowed = true;      // g_bFullscreen の初期値を 0 にしてウィンドウで起動する
     bool d3dWindowedVideoMemory = true;  // ウィンドウ時の D3D 描画先を VIDEOMEMORY で作る（HAL デバイス作成失敗の修正）
@@ -42,9 +50,16 @@ struct Config {
     // "名前#N" なら名前が一致した N 台目だけ
     std::string inputDeviceName;  // ANSI（DIDEVICEINSTANCEA の製品名と比較）
     int inputDeviceIndex = 0;     // 0 = 一致したものすべて
-    // false = GetCapabilities から DIDC_FORCEFEEDBACK を消し、ゲームに FFB（AUTOCENTER 設定と ConstantForce）を
-    // 作らせない。ゲームは既知機種（種別コード 3/8）以外では強さを更新せず、初期値のエフェクトを開始するだけ
-    bool forceFeedback = true;
+    // ---- フォースフィードバック（[ForceFeedback]）
+    FfbMode ffbMode = FfbMode::Native;
+    int ffbGain = 100;         // %。ゲームの力 100 単位を MaxForce の何 % にするか（カーブ適用後、上限で頭打ち）
+    int ffbCurve = 60;         // %。入出力カーブの指数（100 = 線形、小さいほど低速の弱い力を持ち上げる）
+    int ffbFadeInMs = 1500;    // 力が 1 秒以上途切れた後に再開したとき、0 から戻すまでの ms（予選の停止状態からの急な力対策）
+    int ffbMaxForce = 40;      // %。出力の上限（100 = DirectInput の最大 10000）
+    bool ffbInvert = false;    // 力の向きを反転（ホイールが切った方向へ引っ張られる場合）
+    bool ffbAutoCenter = false;  // ゲームの DIPROP_AUTOCENTER（デバイス内蔵のセンタリング）を許可
+    int ffbHoldMs = 100;       // ゲームが力を更新しなくなってから 0 に戻すまでの ms（ゲームは不定期に単発で送る）
+    int ffbSmoothingMs = 80;   // 0 から MaxForce まで変化させるのにかける ms（急な立ち上がりを和らげる。0 = なし）
 
     // ---- 軸の加工（GetDeviceState の結果を書き換える）
     // Joystick / Steering Wheel モードのゲームは Y 軸 1 本を「上=アクセル、下=ブレーキ」として読む。

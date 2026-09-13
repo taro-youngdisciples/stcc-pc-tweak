@@ -279,7 +279,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // （最大化や利用者のドラッグなど、他の大きさへの変更には触れない）。
                 // 幅が狭いとメニューバーが折り返して高さが変わるので、判定は幅を主に使う
                 auto* pos = reinterpret_cast<WINDOWPOS*>(lp);
-                if (g_borderless && g_hwnd == hwnd && !g_applying && pos &&
+                // 最小化（アイコン化で -32000,-32000 へ移動）や最小化中の変更は Windows に任せる
+                const bool minimizing = pos && (IsIconic(hwnd) || pos->x <= -32000 || pos->y <= -32000);
+                if (g_borderless && g_hwnd == hwnd && !g_applying && pos && !minimizing &&
                     (pos->flags & (SWP_NOSIZE | SWP_NOMOVE)) != (SWP_NOSIZE | SWP_NOMOVE)) {
                     // 枠なし全画面では利用者はサイズを変えられないので、位置・サイズの変更はすべてゲーム由来。
                     // ゲームは枠とメニュー込みで窓サイズを計算するので、スタイルからの逆算に頼らずモニタ全体へ固定する

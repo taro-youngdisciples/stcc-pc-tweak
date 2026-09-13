@@ -11,6 +11,7 @@
 #define DIRECTINPUT_VERSION 0x0500
 #include <dinput.h>
 
+#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -194,9 +195,9 @@ HRESULT STDMETHODCALLTYPE Dev_GetCapabilities(IDirectInputDevice2A* self, LPDIDE
         }
     }
     // ゲーム (Input_SetupDevice 0x4688DE) はこのフラグを見て AUTOCENTER 設定と ConstantForce 作成を行う
-    if (SUCCEEDED(hr) && caps && !GetConfig().forceFeedback && (caps->dwFlags & DIDC_FORCEFEEDBACK)) {
+    if (SUCCEEDED(hr) && caps && GetConfig().ffbMode == FfbMode::Off && (caps->dwFlags & DIDC_FORCEFEEDBACK)) {
         caps->dwFlags &= ~DIDC_FORCEFEEDBACK;
-        Log("%p->GetCapabilities: DIDC_FORCEFEEDBACK hidden (ForceFeedback=0)", static_cast<void*>(self));
+        Log("%p->GetCapabilities: DIDC_FORCEFEEDBACK hidden ([ForceFeedback] Mode=off)", static_cast<void*>(self));
     }
     if (caps) {
         Log("%p->GetCapabilities -> 0x%08lX flags=0x%lX devType=0x%lX axes=%lu buttons=%lu povs=%lu ffPeriod=%lu",
@@ -213,8 +214,16 @@ HRESULT STDMETHODCALLTYPE Dev_GetCapabilities(IDirectInputDevice2A* self, LPDIDE
 
 HRESULT STDMETHODCALLTYPE Dev_SetProperty(IDirectInputDevice2A* self, const GUID* prop, LPCDIPROPHEADER ph) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice2A*, const GUID*, LPCDIPROPHEADER)>(self, 6);
-    HRESULT hr = fn(self, prop, ph);
     const auto id = reinterpret_cast<std::uintptr_t>(prop);
+    // [ForceFeedback] Mode=game: ゲームは FFB 機種に AUTOCENTER=1 を設定する。DD ベースの内蔵センタリングは強すぎるので切る
+    DIPROPDWORD autoCenterOff;
+    const Config& cfg = GetConfig();
+    if (id == 9 && ph && ph->dwSize >= sizeof(DIPROPDWORD) && cfg.ffbMode == FfbMode::Game && !cfg.ffbAutoCenter) {
+        std::memcpy(&autoCenterOff, ph, sizeof(autoCenterOff));
+        autoCenterOff.dwData = DIPROPAUTOCENTER_OFF;
+        ph = &autoCenterOff.diph;
+    }
+    HRESULT hr = fn(self, prop, ph);
     if (ph && id == 4 && ph->dwSize >= sizeof(DIPROPRANGE)) {
         auto r = reinterpret_cast<const DIPROPRANGE*>(ph);
         // 軸加工で使うため、ゲームが設定したレンジを覚えておく
@@ -258,9 +267,12 @@ HRESULT STDMETHODCALLTYPE Dev_Acquire(IDirectInputDevice2A* self) {
     return hr;
 }
 
+void FfbTick(IDirectInputDevice2A* dev);
+
 HRESULT STDMETHODCALLTYPE Dev_GetDeviceState(IDirectInputDevice2A* self, DWORD cb, LPVOID data) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice2A*, DWORD, LPVOID)>(self, 9);
     HRESULT hr = fn(self, cb, data);
+    FfbTick(self);  // ゲームは毎フレーム読むので、FFB の出力更新もここで行う
     DeviceState* s = DeviceSlot(self);
     if (!s) {
         return hr;
@@ -323,13 +335,227 @@ HRESULT STDMETHODCALLTYPE Dev_SetCooperativeLevel(IDirectInputDevice2A* self, HW
     return hr;
 }
 
+// ---------------------------------------------------------------- IDirectInputEffect（[ForceFeedback] Mode=game）
+// ゲームは約 30fps で FF_SetConstantForceA → SetParameters(方向+大きさ) → Start(1, 0) を繰り返す
+struct FfbStats {
+    LONG sets;
+    LONG starts;
+    LONG skippedStarts;
+    LONG rawMin;
+    LONG rawMax;
+    LONG outMin;
+    LONG outMax;
+    DWORD windowStart;
+};
+FfbStats g_ffb{0, 0, 0, LONG_MAX, LONG_MIN, LONG_MAX, LONG_MIN, 0};
+SRWLOCK g_ffbLock = SRWLOCK_INIT;
+
+void FlushFfbStatsLocked() {
+    const DWORD now = GetTickCount();
+    if (g_ffb.windowStart == 0) {
+        g_ffb.windowStart = now;
+        return;
+    }
+    if (now - g_ffb.windowStart < 1000) {
+        return;
+    }
+    if (g_ffb.sets > 0 || g_ffb.starts > 0) {
+        Log("[ffb/s] SetParameters=%ld raw[%ld..%ld] out[%ld..%ld] Start=%ld skipped=%ld", g_ffb.sets, g_ffb.rawMin,
+            g_ffb.rawMax, g_ffb.outMin, g_ffb.outMax, g_ffb.starts, g_ffb.skippedStarts);
+    }
+    g_ffb = {0, 0, 0, LONG_MAX, LONG_MIN, LONG_MAX, LONG_MIN, now};
+}
+
+// ゲームの力は不定期（1 秒に数回〜数十回、数秒来ないことも）に届き、元は 30ms で消える単発のエフェクトだった。
+// ゲームからの値は「目標値」として受け取り、実際の出力は FfbTick が毎フレーム
+//  - HoldMs 更新が無ければ 0 へ戻す（一瞬の衝撃が残り続けない）
+//  - Smoothing で変化の速さを制限する（0 と最大の急な切り替えを和らげる）
+// してから SetParameters で送る。符号付きの大きさを方向 27000 に固定して扱う
+struct FfbOutput {
+    IDirectInputDevice2A* dev;
+    IDirectInputEffect* effect;  // AddRef して保持（ゲームが作り直すと差し替える）
+    double target;
+    double current;
+    LONG sent;
+    DWORD lastGameTick;
+    DWORD lastTick;
+    DWORD fadeStart;  // 途切れた後に力が再開した時刻（FadeInMs の起点）
+};
+FfbOutput g_ffbOut{nullptr, nullptr, 0.0, 0.0, 0, 0, 0, 0};
+
+// ゲームは種別コード 8 向けに、内部の整数値を ×40000 して送る（実測: 走行中 1〜150 程度。低速で 1〜10、
+// 250km/h 超のカーブで 50 以上）。100 を満量とし、カーブで小さい値を持ち上げる
+constexpr double kGameUnit = 40000.0;
+constexpr double kFullScaleUnits = 100.0;
+// これ以上力が来なかったら「途切れた」とみなし、再開時にフェードインする
+constexpr DWORD kFadeSilenceMs = 1000;
+
+HRESULT SendFfbMagnitude(LONG magnitude) {
+    DICONSTANTFORCE cf{magnitude};
+    LONG direction[2] = {27000, 0};
+    DIEFFECT e{};
+    e.dwSize = sizeof(e);
+    e.dwFlags = DIEFF_POLAR | DIEFF_OBJECTOFFSETS;
+    e.cAxes = 2;
+    e.rglDirection = direction;
+    e.cbTypeSpecificParams = sizeof(cf);
+    e.lpvTypeSpecificParams = &cf;
+    auto set = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputEffect*, LPCDIEFFECT, DWORD)>(g_ffbOut.effect, 6);
+    return set(g_ffbOut.effect, &e, DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS);
+}
+
+void FfbTick(IDirectInputDevice2A* dev) {
+    FfbOutput& o = g_ffbOut;
+    if (!o.effect || dev != o.dev) {
+        return;
+    }
+    const Config& cfg = GetConfig();
+    const DWORD now = GetTickCount();
+    const DWORD dt = o.lastTick ? now - o.lastTick : 0;
+    o.lastTick = now;
+    if (now - o.lastGameTick > static_cast<DWORD>(cfg.ffbHoldMs)) {
+        o.target = 0.0;
+    }
+    double fade = 1.0;
+    if (cfg.ffbFadeInMs > 0 && o.fadeStart != 0 && now - o.fadeStart < static_cast<DWORD>(cfg.ffbFadeInMs)) {
+        fade = static_cast<double>(now - o.fadeStart) / cfg.ffbFadeInMs;
+    }
+    const double desired = o.target * fade;
+    const double limit = cfg.ffbMaxForce * 100.0;
+    if (cfg.ffbSmoothingMs > 0 && limit > 0) {
+        const double step = limit * dt / cfg.ffbSmoothingMs;
+        const double d = desired - o.current;
+        o.current += d > step ? step : (d < -step ? -step : d);
+    } else {
+        o.current = desired;
+    }
+    const LONG magnitude = static_cast<LONG>(std::lround(o.current));
+    if (magnitude == o.sent) {
+        return;
+    }
+    HRESULT hr = SendFfbMagnitude(magnitude);
+    if (SUCCEEDED(hr)) {
+        o.sent = magnitude;
+        DWORD status = 0;
+        if (magnitude != 0 && SUCCEEDED(o.effect->GetEffectStatus(&status)) && !(status & DIEGES_PLAYING)) {
+            auto start = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputEffect*, DWORD, DWORD)>(o.effect, 7);
+            start(o.effect, 1, 0);  // Acquire を失った後などで止まっていたら再開
+        }
+    }
+    static LONG failures = 0;
+    if (FAILED(hr) && cfg.logInput && InterlockedIncrement(&failures) <= 3) {
+        Log("FFB output SetParameters(mag=%ld) -> 0x%08lX", magnitude, static_cast<unsigned long>(hr));
+    }
+}
+
+HRESULT STDMETHODCALLTYPE Eff_SetParameters(IDirectInputEffect* self, LPCDIEFFECT eff, DWORD flags) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputEffect*, LPCDIEFFECT, DWORD)>(self, 6);
+    if (self != g_ffbOut.effect || !eff || !(flags & DIEP_TYPESPECIFICPARAMS) || !eff->lpvTypeSpecificParams ||
+        eff->cbTypeSpecificParams < sizeof(DICONSTANTFORCE)) {
+        return fn(self, eff, flags);
+    }
+    const Config& cfg = GetConfig();
+    const LONG raw = static_cast<const DICONSTANTFORCE*>(eff->lpvTypeSpecificParams)->lMagnitude;
+    // 満量比 → カーブ → Gain → 上限。符号は方向と Invert から
+    const double x = std::fabs(raw / kGameUnit) / kFullScaleUnits;
+    double mag = std::pow(x, cfg.ffbCurve / 100.0) * (cfg.ffbGain / 100.0);
+    mag = mag > 1.0 ? 1.0 : mag;
+    double sign = raw < 0 ? -1.0 : 1.0;
+    // ゲームは方向 27000(左) か 9000(右) を指定する。9000 は 27000 の逆向き
+    if ((flags & DIEP_DIRECTION) && eff->rglDirection && eff->cAxes >= 1 && eff->rglDirection[0] == 9000) {
+        sign = -sign;
+    }
+    if (cfg.ffbInvert) {
+        sign = -sign;
+    }
+    const double v = sign * mag * (cfg.ffbMaxForce * 100.0);  // 100% = DI_FFNOMINALMAX(10000)
+    const DWORD now = GetTickCount();
+    if (g_ffbOut.lastGameTick == 0 || now - g_ffbOut.lastGameTick > kFadeSilenceMs) {
+        g_ffbOut.fadeStart = now;
+    }
+    g_ffbOut.target = v;
+    g_ffbOut.lastGameTick = now;
+    if (cfg.logInput) {
+        const LONG out = static_cast<LONG>(std::lround(v));
+        AcquireSRWLockExclusive(&g_ffbLock);
+        ++g_ffb.sets;
+        g_ffb.rawMin = raw < g_ffb.rawMin ? raw : g_ffb.rawMin;
+        g_ffb.rawMax = raw > g_ffb.rawMax ? raw : g_ffb.rawMax;
+        g_ffb.outMin = out < g_ffb.outMin ? out : g_ffb.outMin;
+        g_ffb.outMax = out > g_ffb.outMax ? out : g_ffb.outMax;
+        FlushFfbStatsLocked();
+        ReleaseSRWLockExclusive(&g_ffbLock);
+    }
+    return DI_OK;  // 実際の出力は FfbTick
+}
+
+// ゲームはシーン遷移で止める。出力もすぐ 0 にする
+HRESULT STDMETHODCALLTYPE Eff_Stop(IDirectInputEffect* self) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputEffect*)>(self, 8);
+    if (self == g_ffbOut.effect) {
+        g_ffbOut.target = 0.0;
+        g_ffbOut.current = 0.0;
+        g_ffbOut.sent = 0;
+        SendFfbMagnitude(0);
+    }
+    return fn(self);
+}
+
+// 持続時間を無限にしてあるので、再生中なら Start し直さない（毎フレームの再始動による途切れを防ぐ）。
+// Acquire を失うと再生は止まるので、状態を見て止まっていれば Start する
+HRESULT STDMETHODCALLTYPE Eff_Start(IDirectInputEffect* self, DWORD count, DWORD flags) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputEffect*, DWORD, DWORD)>(self, 7);
+    DWORD status = 0;
+    const bool playing = SUCCEEDED(self->GetEffectStatus(&status)) && (status & DIEGES_PLAYING);
+    HRESULT hr = playing ? DI_OK : fn(self, count, flags);
+    if (GetConfig().logInput) {
+        AcquireSRWLockExclusive(&g_ffbLock);
+        ++(playing ? g_ffb.skippedStarts : g_ffb.starts);
+        FlushFfbStatsLocked();
+        ReleaseSRWLockExclusive(&g_ffbLock);
+        static LONG failures = 0;
+        if (FAILED(hr) && InterlockedIncrement(&failures) <= 3) {
+            Log("%p->IDirectInputEffect::Start -> 0x%08lX", static_cast<void*>(self), static_cast<unsigned long>(hr));
+        }
+    }
+    return hr;
+}
+
+void HookEffect(IDirectInputEffect* effect) {
+    static LONG hooked = 0;
+    if (InterlockedExchange(&hooked, 1) == 0) {
+        Log("hook IDirectInputEffect %p", static_cast<void*>(effect));
+        PatchVtable(effect, 6, Eff_SetParameters, "DIEffect::SetParameters");
+        PatchVtable(effect, 7, Eff_Start, "DIEffect::Start");
+        PatchVtable(effect, 8, Eff_Stop, "DIEffect::Stop");
+    }
+}
+
 HRESULT STDMETHODCALLTYPE Dev_CreateEffect(IDirectInputDevice2A* self, REFGUID guid, LPCDIEFFECT eff,
                                            LPDIRECTINPUTEFFECT* out, LPUNKNOWN outer) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice2A*, REFGUID, LPCDIEFFECT, LPDIRECTINPUTEFFECT*,
                                                LPUNKNOWN)>(self, 18);
-    HRESULT hr = fn(self, guid, eff, out, outer);
+    // ゲームは 30ms の ConstantForce を毎フレーム Start し直すので、30fps だと途切れて振動になる → 無限にする
+    const bool game = GetConfig().ffbMode == FfbMode::Game;
+    DIEFFECT copy{};
+    LPCDIEFFECT pass = eff;
+    if (game && eff && guid == GUID_ConstantForce && eff->dwSize <= sizeof(copy)) {
+        std::memcpy(&copy, eff, eff->dwSize);
+        copy.dwDuration = INFINITE;
+        pass = &copy;
+    }
+    HRESULT hr = fn(self, guid, pass, out, outer);
+    if (game && SUCCEEDED(hr) && out && *out && guid == GUID_ConstantForce) {
+        HookEffect(*out);
+        // 出力先を差し替える（F5 を閉じるなどでゲームはデバイスとエフェクトを作り直す）
+        if (g_ffbOut.effect) {
+            g_ffbOut.effect->Release();
+        }
+        (*out)->AddRef();
+        g_ffbOut = {self, *out, 0.0, 0.0, 0, 0, 0, 0};
+    }
     Log("%p->CreateEffect(%s duration=%lu gain=%lu axes=%lu) -> 0x%08lX", static_cast<void*>(self),
-        GuidStr(&guid).c_str(), eff ? eff->dwDuration : 0, eff ? eff->dwGain : 0, eff ? eff->cAxes : 0,
+        GuidStr(&guid).c_str(), pass ? pass->dwDuration : 0, pass ? pass->dwGain : 0, pass ? pass->cAxes : 0,
         static_cast<unsigned long>(hr));
     return hr;
 }
@@ -396,9 +622,23 @@ BOOL CALLBACK EnumDevicesWrap(LPCDIDEVICEINSTANCEA d, LPVOID p) {
         copy.dwDevType = (d->dwDevType & ~0xFF00UL) | (static_cast<DWORD>(subtype) << 8);
         pass = &copy;
     }
+    // [ForceFeedback] Mode=game: ゲームが FFB の強さを更新するのは既知機種の種別コード 3/8 だけ。
+    // コード 3（SideWinder Force Feedback Pro）は F5 で「SideWinder 3D Pro Type」＝ジョイスティック扱いになるので、
+    // FF ドライバを持つデバイスは コード 8 の "DIforce2 Serial Joystick Device"（名前は前方一致）に見せる。
+    // コード 8 は F5 の「Per4mer Racing Wheel」で選べるホイール扱い（0x45B083 は 9 か 8 を探す）
+    static constexpr GUID kNullGuid{};
+    if (cfg.ffbMode == FfbMode::Game && d->dwSize <= sizeof(copy) && GET_DIDEVICE_TYPE(d->dwDevType) == DIDEVTYPE_JOYSTICK &&
+        std::memcmp(&d->guidFFDriver, &kNullGuid, sizeof(GUID)) != 0) {
+        if (pass != &copy) {
+            std::memcpy(&copy, d, d->dwSize);
+            pass = &copy;
+        }
+        strcpy_s(copy.tszProductName, "DIforce2 Serial Joystick Device");
+        Log("    device \"%s\" reported as \"%s\" ([ForceFeedback] Mode=game)", d->tszProductName, copy.tszProductName);
+    }
     BOOL r = c->cb(pass, c->ctx);
     Log("    device type=0x%08lX (sub=%lu)%s instance=\"%s\" product=\"%s\" guidProduct=%s -> cb=%d", origType,
-        (origType >> 8) & 0xFF, pass != d ? (" -> overridden sub=" + std::to_string(subtype)).c_str() : "",
+        (origType >> 8) & 0xFF, pass->dwDevType != origType ? (" -> overridden sub=" + std::to_string(subtype)).c_str() : "",
         d->tszInstanceName, d->tszProductName, GuidStr(&d->guidProduct).c_str(), r);
     return r;
 }

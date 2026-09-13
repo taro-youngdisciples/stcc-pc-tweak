@@ -30,7 +30,8 @@ bool GraphicsHooksNeeded(const Config& c) {
 }
 
 bool InputHooksNeeded(const Config& c) {
-    return c.logInput || c.inputDeviceSubtype != 0 || !c.inputDeviceName.empty() || !c.forceFeedback || c.triggerPedals ||
+    return c.logInput || c.inputDeviceSubtype != 0 || !c.inputDeviceName.empty() || c.ffbMode != FfbMode::Native ||
+           c.triggerPedals ||
            c.steerDeadzone > 0 || c.steerLinearity != 100;
 }
 
@@ -87,7 +88,26 @@ Config LoadConfig(const std::wstring& iniPath) {
         c.inputDeviceName = ansi;
     }
 
-    c.forceFeedback = GetPrivateProfileIntW(L"Input", L"ForceFeedback", 1, ini) != 0;
+    wchar_t ffb[16];
+    GetPrivateProfileStringW(L"ForceFeedback", L"Mode", L"native", ffb, static_cast<DWORD>(std::size(ffb)), ini);
+    if (_wcsicmp(ffb, L"off") == 0) {
+        c.ffbMode = FfbMode::Off;
+    } else if (_wcsicmp(ffb, L"game") == 0) {
+        c.ffbMode = FfbMode::Game;
+    }
+    c.ffbGain = static_cast<int>(GetPrivateProfileIntW(L"ForceFeedback", L"Gain", c.ffbGain, ini));
+    c.ffbMaxForce = static_cast<int>(GetPrivateProfileIntW(L"ForceFeedback", L"MaxForce", c.ffbMaxForce, ini));
+    c.ffbMaxForce = c.ffbMaxForce < 0 ? 0 : (c.ffbMaxForce > 100 ? 100 : c.ffbMaxForce);
+    c.ffbInvert = GetPrivateProfileIntW(L"ForceFeedback", L"Invert", 0, ini) != 0;
+    c.ffbAutoCenter = GetPrivateProfileIntW(L"ForceFeedback", L"AutoCenter", 0, ini) != 0;
+    c.ffbHoldMs = static_cast<int>(GetPrivateProfileIntW(L"ForceFeedback", L"HoldMs", c.ffbHoldMs, ini));
+    c.ffbSmoothingMs = static_cast<int>(GetPrivateProfileIntW(L"ForceFeedback", L"Smoothing", c.ffbSmoothingMs, ini));
+    c.ffbCurve = static_cast<int>(GetPrivateProfileIntW(L"ForceFeedback", L"Curve", c.ffbCurve, ini));
+    c.ffbCurve = c.ffbCurve < 10 ? 10 : (c.ffbCurve > 300 ? 300 : c.ffbCurve);
+    c.ffbFadeInMs = static_cast<int>(GetPrivateProfileIntW(L"ForceFeedback", L"FadeInMs", c.ffbFadeInMs, ini));
+    c.ffbFadeInMs = c.ffbFadeInMs < 0 ? 0 : c.ffbFadeInMs;
+    c.ffbHoldMs = c.ffbHoldMs < 0 ? 0 : c.ffbHoldMs;
+    c.ffbSmoothingMs = c.ffbSmoothingMs < 0 ? 0 : c.ffbSmoothingMs;
     c.triggerPedals = GetPrivateProfileIntW(L"Input", L"TriggerPedals", 0, ini) != 0;
     wchar_t axis[16];
     GetPrivateProfileStringW(L"Input", L"AccelAxis", L"Ry", axis, static_cast<DWORD>(std::size(axis)), ini);

@@ -446,13 +446,25 @@ note = "IDirectInputDevice2::CreateEffect(GUID_ConstantForce)"
 name = "FF_SetConstantForceA"
 addr = 0x00468220
 confidence = "confirmed"
-note = "(player, magnitude)。Input_GetDevType が 3 なら ×1000、8 なら ×10000 で SetParameters(方向 0x6978)。それ以外の機種（汎用ホイール=7 等）は更新せず、どの機種でも最後に FF_StartEffect を呼ぶ → 初期値のエフェクトが鳴るだけ"
+note = "(player, magnitude)。Input_GetDevType が 3 なら ×400、8 なら ×40000 で SetParameters(方向 0x6978=27000 左、負で反転)。それ以外の機種（汎用ホイール=7 等）は更新せず、どの機種でも最後に FF_StartEffect を呼ぶ → 初期値のエフェクトが鳴るだけ。呼び出し元 0x404BAB/0x404BCB（自車の物理更新内、magnitude = ftol(0x477330) した float = ステア反力とみられる）"
 
 [[function]]
 name = "FF_SetConstantForceB"
 addr = 0x00468290
 confidence = "confirmed"
-note = "(player, dir, magnitude)。dir>0 で方向 0x2328、<=0 で 0x6978。種別 3/8 のみ SetParameters、最後に FF_StartEffect"
+note = "(player, dir, magnitude)。dir>0 で方向 0x2328、<=0 で 0x6978、magnitude ×40000（3/8 共通）。種別 3/8 のみ SetParameters、最後に FF_StartEffect。呼び出し元 0x403CED（dir=0x5C 固定、衝突などの単発とみられる）。FF_StopEffect はシーン遷移（0x41C505, 0x41DB3B 等 13 か所）"
+
+[[function]]
+name = "Input_EnumJoystickCb_NameMatch"
+addr = 0x004685E0
+confidence = "confirmed"
+note = "tszProductName(+0x12C) を g_KnownJoystickNames[i] と strncmp(0x478C60, 表の文字列長) で前方一致 → 名前番号 +0x896370。種別コード表 0x4BF498 = {GamePad 4, 3D Pro 1, Precision Pro 2, Force Feedback Pro 3, DIforce2 Serial Joystick 8, Ultimate Per4mer 9}。FFB が効くのは 3/8 のみ。F5 の割り当てダイアログは種別コードで探す: Joystick=5(0x458ED3), SideWinder 3D Pro Type=1/2/3(0x45C0C3), Per4mer Racing Wheel=9/8(0x45B083), Steering Wheel(T2)=7(0x45D523)。stccfix [ForceFeedback] Mode=game は FF 対応デバイスの名前を DIforce2 Serial Joystick Device(8) に見せ、Per4mer Racing Wheel で選ばせる。選択は STCC.DAT に保存"
+
+[[function]]
+name = "FF_CreateConstantForce_Params"
+addr = 0x00468B4F
+confidence = "confirmed"
+note = "DIEFFECT: dwFlags=0x12(CARTESIAN|OBJECTOFFSETS), dwDuration=引数(30000us=30ms), dwGain=10000, TriggerButton=NOTRIGGER, cAxes=2, DICONSTANTFORCE。ゲームは約 30fps で毎回 Start するので 30ms では途切れる → stccfix は INFINITE に変更し再生中の Start を省く"
 
 [[function]]
 name = "FF_StartEffect"

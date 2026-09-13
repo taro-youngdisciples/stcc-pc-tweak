@@ -34,8 +34,12 @@ void Startup() {
     Log("config: Windowed=%d D3DWindowedVideoMemory=%d LogGraphics=%d LogInput=%d InputDeviceSubtype=%d",
         cfg.windowed ? 1 : 0, cfg.d3dWindowedVideoMemory ? 1 : 0, cfg.logGraphics ? 1 : 0, cfg.logInput ? 1 : 0,
         cfg.inputDeviceSubtype);
-    Log("config: DeviceName=\"%s\" #%d ForceFeedback=%d", cfg.inputDeviceName.c_str(), cfg.inputDeviceIndex,
-        cfg.forceFeedback ? 1 : 0);
+    static constexpr const char* kFfbModeNames[] = {"off", "native", "game"};
+    Log("config: DeviceName=\"%s\" #%d FFB Mode=%s Gain=%d MaxForce=%d Curve=%d Invert=%d AutoCenter=%d HoldMs=%d "
+        "Smoothing=%d FadeInMs=%d",
+        cfg.inputDeviceName.c_str(), cfg.inputDeviceIndex, kFfbModeNames[static_cast<int>(cfg.ffbMode)], cfg.ffbGain,
+        cfg.ffbMaxForce, cfg.ffbCurve, cfg.ffbInvert ? 1 : 0, cfg.ffbAutoCenter ? 1 : 0, cfg.ffbHoldMs,
+        cfg.ffbSmoothingMs, cfg.ffbFadeInMs);
     Log("config: TriggerPedals=%d AccelAxis=%d%s BrakeAxis=%d%s PedalDeadzone=%d SteerDeadzone=%d SteerLinearity=%d",
         cfg.triggerPedals ? 1 : 0, cfg.accelAxis, cfg.accelInvert ? "(inv)" : "", cfg.brakeAxis,
         cfg.brakeInvert ? "(inv)" : "", cfg.pedalDeadzone, cfg.steerDeadzone, cfg.steerLinearity);
