@@ -31,8 +31,9 @@ void Startup() {
 
     g_config = LoadConfig(dir + L"\\stccfix.ini");
     const Config& cfg = g_config;
-    Log("config: Windowed=%d D3DWindowedVideoMemory=%d LogGraphics=%d LogInput=%d", cfg.windowed ? 1 : 0,
-        cfg.d3dWindowedVideoMemory ? 1 : 0, cfg.logGraphics ? 1 : 0, cfg.logInput ? 1 : 0);
+    Log("config: Windowed=%d D3DWindowedVideoMemory=%d LogGraphics=%d LogInput=%d InputDeviceSubtype=%d",
+        cfg.windowed ? 1 : 0, cfg.d3dWindowedVideoMemory ? 1 : 0, cfg.logGraphics ? 1 : 0, cfg.logInput ? 1 : 0,
+        cfg.inputDeviceSubtype);
 
     if (cfg.logGraphics) {
         InstallDirectDrawLogging();  // 版に依存しない

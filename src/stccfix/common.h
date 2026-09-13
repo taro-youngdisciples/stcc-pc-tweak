@@ -17,6 +17,9 @@ struct Config {
     bool d3dWindowedVideoMemory = true;  // ウィンドウ時の D3D 描画先を VIDEOMEMORY で作る（HAL デバイス作成失敗の修正）
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
+    // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
+    // ゲームは サブタイプ 4(GAMEPAD)→Game Pad、6(WHEEL)→Steering Wheel、それ以外→Joystick として選択肢を出す
+    int inputDeviceSubtype = 0;
 };
 Config LoadConfig(const std::wstring& iniPath);
 // DllMain で読み込んだ設定（DllMain 以降はいつでも参照可）

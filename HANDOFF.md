@@ -228,6 +228,8 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
   | L1 R1 / L2 R2(デジタル) | b4 b5 / b6 b7 |
   | SHARE OPTIONS / L3 R3 / PS タッチパッド | b8 b9 / b10 b11 / b12 b13 |
   - ゲームの Game Pad 設定の Button1 = b0(□)、Button2 = b1(×)
+- **F5 Device Settings で DS4 を繋ぐと、選択できるのは Keyboard と Game Pad のみ**（Joystick / SideWinder 系 / Steering Wheel（T2）/ Per4mer はグレーアウト）→ ゲームがデバイス種別（DIDEVTYPE サブタイプ=GAMEPAD）や既知名で選択肢を絞っている。**DLL で種別を JOYSTICK / WHEEL に見せればアナログモードを解放できる見込み**
+- **Steam 終了状態でゲーム中に切断は起きなかった**（2026-09-13 午後）。切断はこれまで全て「STCC 実行中 かつ Steam 起動中」→ ゲームの排他 Acquire と Steam の PS4 対応の競合が有力。当面 Steam は終了してテストする
 
 ### 次にやること
 - [ ] F5 で Joystick / Game Pad / Steering Wheel（T2）を選んだ場合の `GetDeviceState` と操作感を確認 → DLL での軸合成（L2/R2 → ペダル軸）の要否を決める

@@ -272,10 +272,21 @@ struct EnumDevCtx {
 
 BOOL CALLBACK EnumDevicesWrap(LPCDIDEVICEINSTANCEA d, LPVOID p) {
     auto* c = static_cast<EnumDevCtx*>(p);
-    BOOL r = c->cb(d, c->ctx);
-    Log("    device type=0x%08lX (sub=%lu) instance=\"%s\" product=\"%s\" guidProduct=%s ff=%s -> cb=%d", d->dwDevType,
-        (d->dwDevType >> 8) & 0xFF, d->tszInstanceName, d->tszProductName, GuidStr(&d->guidProduct).c_str(),
-        GuidStr(&d->guidFFDriver).c_str(), r);
+    // ゲーム (Input_EnumJoystickCb) は dwDevType のサブタイプで F5 Device Settings の選択肢を決める。
+    // 設定があれば、サブタイプだけ書き換えたコピーを渡す
+    DIDEVICEINSTANCEA copy;
+    LPCDIDEVICEINSTANCEA pass = d;
+    const int subtype = GetConfig().inputDeviceSubtype;
+    const DWORD origType = d->dwDevType;
+    if (subtype != 0 && d->dwSize <= sizeof(copy) && GET_DIDEVICE_TYPE(d->dwDevType) == DIDEVTYPE_JOYSTICK) {
+        std::memcpy(&copy, d, d->dwSize);
+        copy.dwDevType = (d->dwDevType & ~0xFF00UL) | (static_cast<DWORD>(subtype) << 8);
+        pass = &copy;
+    }
+    BOOL r = c->cb(pass, c->ctx);
+    Log("    device type=0x%08lX (sub=%lu)%s instance=\"%s\" product=\"%s\" guidProduct=%s -> cb=%d", origType,
+        (origType >> 8) & 0xFF, pass != d ? (" -> overridden sub=" + std::to_string(subtype)).c_str() : "",
+        d->tszInstanceName, d->tszProductName, GuidStr(&d->guidProduct).c_str(), r);
     return r;
 }
 

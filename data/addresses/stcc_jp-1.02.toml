@@ -319,7 +319,32 @@ note = "(index, out) DIDEVCAPS(0x2C) をコピー。呼び出し元 0x43ADF0"
 name = "Input_GetDevType"
 addr = 0x00468310
 confidence = "confirmed"
-note = "戻り 3/8 のとき FFB を使う（FF_SetConstantForce 0x468220 / 0x468290）"
+note = "(player) → Input_GetTypeCode(割当デバイス)。戻り 3/8 のとき FFB を使う（FF_SetConstantForce 0x468220 / 0x468290）"
+
+[[function]]
+name = "Input_GetTypeCode"
+addr = 0x00468500
+confidence = "confirmed"
+note = "(device index) → 既知名なら g_KnownJoystickTypeCodes[名前番号]、そうでなければ DIDEVTYPE サブタイプ 4(GAMEPAD)→6, 6(WHEEL)→7, その他→5"
+
+[[function]]
+name = "Input_FindDeviceOfType"
+addr = 0x00468560
+confidence = "confirmed"
+note = "(type code) → そのタイプのデバイス番号 or -1。Device Settings ダイアログ (0x457040〜) が各ラジオボタンの有効/無効判定に使う"
+
+[[global]]
+name = "g_KnownJoystickTypeCodes"
+addr = 0x004BF498
+type = "int[6]"
+confidence = "confirmed"
+note = "g_KnownJoystickNames と同じ並び"
+
+[[function]]
+name = "DeviceSettingsDlg_ctor"
+addr = 0x00457040
+confidence = "confirmed"
+note = "CDialog(IDD=102)。コントロール ID: P1 Keyboard 1000 / GamePad 1001 / Joystick 1002 / SW GamePad 1003 / T2 Wheel 1004 / Per4mer 1005 / SW 3DPro 1006"
 
 [[function]]
 name = "FF_SetParameters"
