@@ -160,9 +160,17 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - 上記 dgVoodoo2 zip はユーザーが外部サービスでスキャンしてクリーンと判断し、復元済み（SHA-256 `74AEB464…DEA0956E`、GitHub 配布物とサイズ一致）。`D:\Games\STCC_work\dgVoodoo2\` に展開済み
 - 起動時に Windows の「DirectPlay が必要」ダイアログが出る（exe が `DPLAYX.dll` を静的 import しているため）→ Windows の機能として DirectPlay を有効化する
 
+### 基準起動テスト結果（ラッパーなし、2026-09-13）
+- 環境: モニタ3枚（主: 4K を 175% スケーリング＝論理 2194x1234、副: 同 4K、上: 1920x1080）、GPU 2枚（RTX 2070 / UHD 630）、デスクトップ 32bpp
+- **起動はする。** タイトルバー付きの全画面表示
+- **Alt+Tab でクラッシュ。** マルチモニタで解像度切替が乱れ、最終的に落ちる。表示以外（Graphics メニュー、BGM、速度）は検証不可
+- クラッシュ: `STCC.EXE+0x47C44` の `0xC0000005`（→ `SwRast_DrawTexturedSpans @ 0x4479F0`、ソフトウェア描画のスパン書き込み。サーフェス喪失後の古いバッファへの書き込みと推定）
+- Windows が自動で互換シム **`DWM8And16BitMitigation`** を付与（`HKCU\...\AppCompatFlags\Layers` の `D:\Games\STCC\STCC.EXE`）
+- MFC の設定キー `HKCU\Software\SEGA\SEGA Touring Car Championship for PC\{Settings, Recent File List}` が作られるが値は空。`C:\WINDOWS\stcc.ini` への書き込み・VirtualStore 分岐・ゲームフォルダへの新規ファイルはなし
+- **結論: 素の DirectDraw は Win11 マルチモニタ環境では実用不可 → ラッパー必須**
+
 ### 次にやること
-- [ ] ラッパーなしでの基準起動テスト（起動可否・表示・Graphics メニュー・BGM・速度）
-- [ ] `tools\wrapper.ps1 enable` で dgVoodoo2（`tools\dgvoodoo\dgVoodoo.conf`）を配置して同じ項目を比較
+- [ ] dgVoodoo2 を配置済み（`tools\wrapper.ps1 enable`、設定 `tools\dgvoodoo\dgVoodoo.conf`）→ 同じ項目で起動テスト
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
 - [ ] **Phase 3**: `dinput.dll` プロキシの骨格（CMake、MinHook、ini、ログ、版判定、DDraw/D3D/DInput/MCI 呼び出しログ）
 - [ ] `tools/run.ps1`（ビルド → 配置 → 起動 → ログ回収）

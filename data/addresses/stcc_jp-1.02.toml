@@ -140,6 +140,18 @@ addr = 0x004AF858
 type = "GUID"
 confidence = "confirmed"
 
+[[function]]
+name = "SwRast_DrawTexturedSpans"
+addr = 0x004479F0
+confidence = "likely"
+note = "DirectDraw(ソフトウェア描画)経路のテクスチャ付きスパン塗り。ロック中サーフェスのバッファ(DAT_007F5CDC 起点)へ直接書く。Win11 素の DDraw で Alt+Tab 時に 0x447C44 で AV（サーフェス喪失後の古いポインタへの書き込みと推定）"
+
+[[global]]
+name = "g_SwRastSpanTable"
+addr = 0x007F5CE0
+type = "int[8][]"
+confidence = "likely"
+
 # ---------------------------------------------------------------- input
 [[function]]
 name = "Input_InitDirectInput"
