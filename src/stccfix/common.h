@@ -24,6 +24,8 @@ struct Config {
     int aspectH = 3;
     // 画面幅いっぱいの背景（空など）の扱い。true = テクスチャ座標を広げて比率を保つ / false = 横に引き伸ばす
     bool wideBackgroundExtend = true;
+    // レース中の HUD を画面の左右端へ寄せる（false = 中央 4:3 のまま）
+    bool hudAnchorEdges = true;
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
     bool logWindow = false;    // 窓サイズ変更（SetWindowPos/MoveWindow の呼び出し元、WM_SIZE）をログ
@@ -76,6 +78,21 @@ bool ApplyPatches(const BytePatch* patches, std::size_t count);
 // exe の IAT の DDRAW!DirectDrawCreate を差し替え、以後生成される COM オブジェクトの vtable をフックする。
 // DllMain から呼んでよい（IAT 書き換えのみ）
 void InstallDirectDrawLogging();
+
+// ワイド化で作った横長の描画面の情報（作っていなければ false）
+struct WideInfo {
+    LONG baseW;   // ゲームが要求した幅（640 / 320）
+    LONG baseH;
+    LONG wideW;   // 実際の幅
+    LONG offset;  // 左右の余白
+};
+bool GetWideInfo(WideInfo* out);
+// 直近の描画先ロックの前に 3D を描いていたか（レース中など）
+bool LastLockHad3D();
+
+// ---------------------------------------------------------------- hooks_hud.cpp
+// レース中の HUD スプライトを横長画面の左右端へ寄せる。jp-1.02 専用。DllMain から呼ぶ
+void InstallHudHooks();
 
 // ---------------------------------------------------------------- hooks_window.cpp
 // ウィンドウモードの窓サイズ維持と 4:3 リサイズ。jp-1.02 専用。DllMain から呼ぶ

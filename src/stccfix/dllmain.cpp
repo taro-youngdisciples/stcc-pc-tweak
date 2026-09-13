@@ -54,6 +54,9 @@ void Startup() {
     if (cfg.windowed) {
         ApplyPatches(kWindowedJp102, std::size(kWindowedJp102));
         InstallWindowHooks();
+        if (WidescreenScale(cfg) != 1.0 && cfg.hudAnchorEdges) {
+            InstallHudHooks();
+        }
     }
     if (cfg.d3dWindowedVideoMemory) {
         ApplyPatches(kD3DWindowedVideoMemoryJp102, std::size(kD3DWindowedVideoMemoryJp102));

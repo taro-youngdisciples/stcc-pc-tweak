@@ -45,6 +45,7 @@ struct WideTarget {
 };
 WideTarget g_wide;
 LONG g_drawsSinceLock = 0;  // 前回の描画先ロック以降の DrawPrimitive 回数（0 なら 2D だけのフレーム）
+bool g_lastLockHad3D = false;
 
 LONG WideOffsetFor(LONG baseW, LONG baseH) {
     const Config& cfg = GetConfig();
@@ -654,7 +655,9 @@ __declspec(noinline) HRESULT STDMETHODCALLTYPE Surf_Lock(IDirectDrawSurface* sel
         const LONG pitch = desc->lPitch;
         auto* base = static_cast<BYTE*>(desc->lpSurface);
         // 前回ロック以降 3D を描いていない = 2D だけの画面（メニュー等）。左右の余白に前の画面が残らないよう黒で塗る
-        if (InterlockedExchange(&g_drawsSinceLock, 0) == 0 && bpp > 0) {
+        const LONG draws = InterlockedExchange(&g_drawsSinceLock, 0);
+        g_lastLockHad3D = draws != 0;
+        if (draws == 0 && bpp > 0) {
             const size_t leftBytes = static_cast<size_t>(g_wide.offset * bpp);
             const size_t rightStart = static_cast<size_t>((g_wide.offset + g_wide.baseW) * bpp);
             const size_t rightBytes = static_cast<size_t>((g_wide.wideW - g_wide.offset - g_wide.baseW) * bpp);
@@ -823,6 +826,18 @@ bool PatchIat(HMODULE module, const char* dllName, void* target, void* detour) {
 }
 
 }  // namespace
+
+bool GetWideInfo(WideInfo* out) {
+    if (!out || !g_wide.surf || g_wide.offset <= 0) {
+        return false;
+    }
+    *out = {g_wide.baseW, g_wide.baseH, g_wide.wideW, g_wide.offset};
+    return true;
+}
+
+bool LastLockHad3D() {
+    return g_lastLockHad3D;
+}
 
 void InstallDirectDrawLogging() {
     HMODULE ddraw = GetModuleHandleW(L"ddraw.dll");  // exe の静的 import なので既にマップ済み

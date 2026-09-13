@@ -30,6 +30,7 @@ add_library(stccfix SHARED
   src/stccfix/hooks_ddraw.cpp
   src/stccfix/hooks_dinput.cpp
   src/stccfix/hooks_game.cpp
+  src/stccfix/hooks_hud.cpp
   src/stccfix/hooks_window.cpp
   src/stccfix/dllmain.cpp
   src/stccfix/dinput.def
