@@ -98,6 +98,31 @@ confidence = "confirmed"
 note = "ウィンドウ: DDSCAPS_PRIMARYSURFACE / 全画面: +COMPLEX|FLIP, BackBufferCount=1。D3D 時 |= 3DDEVICE|VIDEOMEMORY。結果 g_pPrimarySurface"
 
 [[function]]
+name = "Gfx_SetupRenderSurface"
+addr = 0x004364B0
+confidence = "confirmed"
+note = "g_pRenderSurface = Gfx_CreateRenderSurface(w, h, g_bFullscreen ? 0 : 2)"
+
+[[function]]
+name = "Gfx_CreateRenderSurface"
+addr = 0x004364F0
+confidence = "confirmed"
+note = "mode 0: primary の GetAttachedSurface(BACKBUFFER) / mode 1: OFFSCREENPLAIN(0x40) / mode 2: SYSTEMMEMORY(0x800) を CreateSurface。D3D モード時 |= 3DDEVICE。ウィンドウ+D3D では HAL の CreateDevice が D3DERR_SURFACENOTINVIDMEM(0x887602EB) で失敗 → stccfix が 0x436548 を VIDEOMEMORY|3DDEVICE にパッチ"
+
+[[global]]
+name = "g_pRenderSurface"
+addr = 0x00567C44
+type = "IDirectDrawSurface*"
+confidence = "confirmed"
+note = "D3D_SelectDevice の CreateDevice 対象"
+
+[[function]]
+name = "D3D_SetupViewport_Inner"
+addr = 0x00440EE0
+confidence = "likely"
+note = "CreateViewport → AddViewport → SetViewport。D3D 初期化失敗後に呼ばれると device が NULL で 0x440F1E AV"
+
+[[function]]
 name = "Gfx_CreateClipper"
 addr = 0x00436FD0
 confidence = "confirmed"

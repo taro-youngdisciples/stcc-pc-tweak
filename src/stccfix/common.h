@@ -14,6 +14,7 @@ void Log(const char* fmt, ...);
 // ---------------------------------------------------------------- config.cpp
 struct Config {
     bool windowed = true;      // g_bFullscreen の初期値を 0 にしてウィンドウで起動する
+    bool d3dWindowedVideoMemory = true;  // ウィンドウ時の D3D 描画先を VIDEOMEMORY で作る（HAL デバイス作成失敗の修正）
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
 };
 Config LoadConfig(const std::wstring& iniPath);
