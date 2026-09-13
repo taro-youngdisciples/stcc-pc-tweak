@@ -52,8 +52,19 @@ CD トラック: 全 19 トラック。Track 1 = データ、**Track 2〜19 = CD
 2. **float の 4/3・3/4、640/480 定数がどこにも無い。** Saturn 由来で固定小数点演算の可能性が高い（16.16 の 0.75 = `0x0000C000` は .rdata に 25 箇所あるがノイズも多い）。ワイド化ではアスペクト値を「実行時に計算されている固定小数点」として追う必要がある。
 3. D3D は DX5 の `IDirect3D2` 系。dgVoodoo2 の DirectDraw/D3D5 対応範囲内。
 
-## 3. 未解決
+## 3. Ghidra headless による呼び出し元（v1.02）
 
-- `DirectInputCreateA` の呼び出し箇所（IAT 直接呼び出しでは見つからず、サンク経由と推定）→ Ghidra で確認
+`tools/ghidra/FindImportCallers.java` の結果。import はすべて `0x476E30` 付近のサンク（`jmp [IAT]`）経由で呼ばれる。
+
+| import | サンク | 呼び出し元 |
+|---|---|---|
+| `DirectInputCreateA` | `0x476E4E` | `FUN_00468040`（1箇所のみ） |
+| `DirectDrawCreate` | `0x476E30` | `FUN_00435390`（1箇所のみ） |
+| `DirectDrawEnumerateA` | `0x476E36` | `FUN_00437040`, `FUN_004372B0` |
+| `DirectSoundCreate` | `0x476E3C` | `FUN_00453200` |
+| `mciSendCommandA` | （直接） | `0x4529C0`〜`0x452F70` に集中 → CD-DA 制御モジュール |
+| `timeGetTime` | （直接） | 約90箇所。`0x470D10`〜`0x4730C0` に密集（計測/タイミング系と推定）、ほか `0x415670`, `0x422540`, `0x437xxx` |
+
+## 4. 未解決
 - `.MRG` / `.BIN` のフォーマット
 - インストール後フォルダとの差分（Phase 2 で `-Compare disc,installed`）
