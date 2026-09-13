@@ -319,6 +319,8 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - 公開名 **stcc-pc-tweak**（GitHub taro-youngdisciples/stcc-pc-tweak）、MIT（taro-youngdisciples）、履歴ごと公開、プレリリース v0.1.0、当面インタラクション制限（collaborators_only）
 - コミットの作者メールは公開前に GitHub noreply へ書き換える（ローカル git 設定も noreply）
 - 説明書: README.md（英）/ README.ja.md / docs/DEVELOPMENT.md / LICENSE / THIRD_PARTY_NOTICES.md。リリース zip は `tools\package.ps1 -Version x.y.z`（dll, ini, dgVoodoo.conf, README×2, LICENSE, NOTICES のみ）
+- **元にしたディスクは日本版の再販「Ultra2000 シリーズ」**（ユーザー情報。ボリュームラベル `Touring_Car`、フォルダ日付 2001-04-18、`D3D\updatej.exe` 2001-04-08 入り）。1998 年の初回版はパッチが別配布の可能性、海外版は exe 別物で非対応 → README に明記
+- 非公開で https://github.com/taro-youngdisciples/stcc-pc-tweak を作成、プレリリース v0.1.0。公開切替とインタラクション制限はユーザー確認後
 
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない

@@ -54,7 +54,7 @@ Tested with: a DualShock 4-compatible pad (USB and Bluetooth), Fanatec CSL DD wi
 
 | Item | Details |
 |---|---|
-| Game | **Japanese Windows version, v1.02.** This is the only supported executable. The disc installs v1.00; the v1.02 update is on the same disc. |
+| Game | **Japanese Windows version, v1.02.** This is the only supported executable. Tested with the Japanese "Ultra2000 series" budget re-release, which installs v1.00 and carries the v1.02 update on the same disc. See [Tested disc and other editions](#tested-disc-and-other-editions). |
 | Disc image | A 1:1 image of your disc **including the audio tracks** (for example BIN/CUE), mounted as a virtual CD-ROM drive. See below. |
 | Windows | Windows 11 with the **DirectPlay** feature enabled. <!-- TODO: Windows 10 untested --> |
 | dgVoodoo2 | Tested with version 2.87.4. Download it yourself from the official site. |
@@ -69,6 +69,18 @@ audio tracks as well. An image with only the data track may start, but you will 
 
 Use a virtual drive tool that can mount BIN/CUE images with audio tracks. The built-in Windows "Mount" command only
 handles ISO/VHD files and cannot play audio tracks. ImgDrive was used during development.
+
+### Tested disc and other editions
+
+| Edition | Status |
+|---|---|
+| Japanese "Ultra2000 series" re-release (2001, volume label `Touring_Car`, contains `D3D\updatej.exe`) | **Tested.** Everything in this README was checked with this disc. |
+| Original Japanese release (1998) | Untested. Should work if, after applying the official patch 1.02, `STCC.EXE` has the v1.02 SHA-256 below. The patch may not be on that disc. |
+| English / European and other overseas versions | **Not supported.** Their executable is different, so stccfix detects an unknown version and does nothing except pass DirectInput through. |
+
+What decides support is the `STCC.EXE` file, not the disc: stccfix only patches the exact Japanese v1.02 executable.
+The disc check (below) only looks for `\stcc\stcc.exe` and `\stcc\data\bg\sky.bmp`, which the Japanese discs are
+expected to share, but other editions have not been tried. Reports from other editions are welcome once issues are open.
 
 ### Checking your game version
 
@@ -102,7 +114,8 @@ Without it Windows shows a "this app needs DirectPlay" dialog when the game star
 
 ### 3. Update the game to v1.02
 
-1. On the disc, `D3D\updatej.exe` is a self-extracting archive (WinZip) that contains the v1.02 `STCC.EXE`.
+1. On the Ultra2000 disc, `D3D\updatej.exe` is a self-extracting archive (WinZip) that contains the v1.02 `STCC.EXE`.
+   If your disc does not have it, use the official patch 1.02 from another source; the result must match the v1.02 SHA-256.
 2. Extract it to a temporary folder.
 3. Back up the installed `STCC.EXE`, then copy the extracted `STCC.EXE` over it.
 4. Check the SHA-256 as shown above.
