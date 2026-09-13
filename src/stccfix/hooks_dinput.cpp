@@ -11,6 +11,7 @@
 #define DIRECTINPUT_VERSION 0x0500
 #include <dinput.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -83,19 +84,24 @@ const char* JoyOffsetName(DWORD ofs) {
 }
 
 // ---------------------------------------------------------------- IDirectInputDevice2A
-struct DeviceLogState {
+constexpr int kAxisCount = 8;  // X Y Z Rx Ry Rz Slider0 Slider1（DIJOYSTATE 先頭から 4 バイトずつ）
+
+struct DeviceState {
     IDirectInputDevice2A* dev;
+    // ゲームが DIPROP_RANGE で設定した軸ごとのレンジ（未設定なら DirectInput 既定の 0..65535）
+    LONG rangeMin[kAxisCount];
+    LONG rangeMax[kAxisCount];
     DIJOYSTATE last;
     bool hasLast;
     DWORD lastLogTick;
     LONG polls;
 };
-DeviceLogState g_devices[4];
+DeviceState g_devices[4];
 SRWLOCK g_devLock = SRWLOCK_INIT;
 
-DeviceLogState* DeviceSlot(IDirectInputDevice2A* dev) {
+DeviceState* DeviceSlot(IDirectInputDevice2A* dev) {
     AcquireSRWLockExclusive(&g_devLock);
-    DeviceLogState* found = nullptr;
+    DeviceState* found = nullptr;
     for (auto& d : g_devices) {
         if (d.dev == dev) {
             found = &d;
@@ -107,6 +113,10 @@ DeviceLogState* DeviceSlot(IDirectInputDevice2A* dev) {
             if (!d.dev) {
                 d = {};
                 d.dev = dev;
+                for (int i = 0; i < kAxisCount; ++i) {
+                    d.rangeMin[i] = 0;
+                    d.rangeMax[i] = 65535;
+                }
                 found = &d;
                 break;
             }
@@ -114,6 +124,54 @@ DeviceLogState* DeviceSlot(IDirectInputDevice2A* dev) {
     }
     ReleaseSRWLockExclusive(&g_devLock);
     return found;
+}
+
+LONG& AxisRef(DIJOYSTATE& js, int axis) {
+    return axis < 6 ? *(&js.lX + axis) : js.rglSlider[axis - 6];
+}
+
+// 軸値を 0..1 に正規化（invert で反転）
+double Normalize01(const DeviceState& s, int axis, LONG v, bool invert) {
+    const double span = static_cast<double>(s.rangeMax[axis]) - s.rangeMin[axis];
+    double t = span > 0 ? (static_cast<double>(v) - s.rangeMin[axis]) / span : 0.0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return invert ? 1.0 - t : t;
+}
+
+// ゲームに渡す直前の DIJOYSTATE を設定に従って書き換える
+void RemapState(const DeviceState& s, DIJOYSTATE& js) {
+    const Config& cfg = GetConfig();
+
+    if (cfg.triggerPedals) {
+        const double dz = cfg.pedalDeadzone / 100.0;
+        auto pedal = [&](int axis, bool invert) {
+            double t = Normalize01(s, axis, AxisRef(js, axis), invert);
+            return t < dz ? 0.0 : (t - dz) / (1.0 - dz);
+        };
+        const double accel = pedal(cfg.accelAxis, cfg.accelInvert);
+        const double brake = pedal(cfg.brakeAxis, cfg.brakeInvert);
+        if (accel > 0 || brake > 0) {
+            // Y は「最小値側 = スティック上 = アクセル」
+            const double center = (static_cast<double>(s.rangeMin[1]) + s.rangeMax[1]) / 2;
+            const double half = (static_cast<double>(s.rangeMax[1]) - s.rangeMin[1]) / 2;
+            js.lY = static_cast<LONG>(std::lround(center + (brake - accel) * half));
+        }
+    }
+
+    if (cfg.steerDeadzone > 0 || cfg.steerLinearity != 100) {
+        const double center = (static_cast<double>(s.rangeMin[0]) + s.rangeMax[0]) / 2;
+        const double half = (static_cast<double>(s.rangeMax[0]) - s.rangeMin[0]) / 2;
+        if (half > 0) {
+            double x = (js.lX - center) / half;
+            const double sign = x < 0 ? -1.0 : 1.0;
+            double mag = std::fabs(x);
+            mag = mag > 1 ? 1 : mag;
+            const double dz = cfg.steerDeadzone / 100.0;
+            mag = mag < dz ? 0.0 : (mag - dz) / (1.0 - dz);
+            mag = std::pow(mag, cfg.steerLinearity / 100.0);
+            js.lX = static_cast<LONG>(std::lround(center + sign * mag * half));
+        }
+    }
 }
 
 BOOL CALLBACK EnumObjectsLog(LPCDIDEVICEOBJECTINSTANCEA o, LPVOID) {
@@ -144,6 +202,20 @@ HRESULT STDMETHODCALLTYPE Dev_SetProperty(IDirectInputDevice2A* self, const GUID
     const auto id = reinterpret_cast<std::uintptr_t>(prop);
     if (ph && id == 4 && ph->dwSize >= sizeof(DIPROPRANGE)) {
         auto r = reinterpret_cast<const DIPROPRANGE*>(ph);
+        // 軸加工で使うため、ゲームが設定したレンジを覚えておく
+        if (SUCCEEDED(hr)) {
+            if (DeviceState* s = DeviceSlot(self)) {
+                if (ph->dwHow == DIPH_DEVICE) {
+                    for (int i = 0; i < kAxisCount; ++i) {
+                        s->rangeMin[i] = r->lMin;
+                        s->rangeMax[i] = r->lMax;
+                    }
+                } else if (ph->dwHow == DIPH_BYOFFSET && ph->dwObj % 4 == 0 && ph->dwObj / 4 < kAxisCount) {
+                    s->rangeMin[ph->dwObj / 4] = r->lMin;
+                    s->rangeMax[ph->dwObj / 4] = r->lMax;
+                }
+            }
+        }
         Log("%p->SetProperty(RANGE %s obj=0x%02lX(%s) min=%ld max=%ld) -> 0x%08lX", static_cast<void*>(self),
             HowName(ph->dwHow), ph->dwObj, JoyOffsetName(ph->dwObj), r->lMin, r->lMax, static_cast<unsigned long>(hr));
     } else if (ph && id < 0x10000 && ph->dwSize >= sizeof(DIPROPDWORD)) {
@@ -174,7 +246,7 @@ HRESULT STDMETHODCALLTYPE Dev_Acquire(IDirectInputDevice2A* self) {
 HRESULT STDMETHODCALLTYPE Dev_GetDeviceState(IDirectInputDevice2A* self, DWORD cb, LPVOID data) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice2A*, DWORD, LPVOID)>(self, 9);
     HRESULT hr = fn(self, cb, data);
-    DeviceLogState* s = DeviceSlot(self);
+    DeviceState* s = DeviceSlot(self);
     if (!s) {
         return hr;
     }
@@ -188,6 +260,11 @@ HRESULT STDMETHODCALLTYPE Dev_GetDeviceState(IDirectInputDevice2A* self, DWORD c
     if (cb != sizeof(DIJOYSTATE) || !data) {
         return hr;
     }
+    RemapState(*s, *static_cast<DIJOYSTATE*>(data));
+    if (!GetConfig().logInput) {
+        return hr;
+    }
+    // 以下はログ（ゲームに渡す加工後の値を記録する）
     const auto* js = static_cast<const DIJOYSTATE*>(data);
     auto moved = [](LONG a, LONG b) { return std::labs(a - b) > 6; };
     bool changed = !s->hasLast || moved(js->lX, s->last.lX) || moved(js->lY, s->last.lY) || moved(js->lZ, s->last.lZ) ||

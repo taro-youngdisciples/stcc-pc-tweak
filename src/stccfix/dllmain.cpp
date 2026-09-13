@@ -34,6 +34,9 @@ void Startup() {
     Log("config: Windowed=%d D3DWindowedVideoMemory=%d LogGraphics=%d LogInput=%d InputDeviceSubtype=%d",
         cfg.windowed ? 1 : 0, cfg.d3dWindowedVideoMemory ? 1 : 0, cfg.logGraphics ? 1 : 0, cfg.logInput ? 1 : 0,
         cfg.inputDeviceSubtype);
+    Log("config: TriggerPedals=%d AccelAxis=%d%s BrakeAxis=%d%s PedalDeadzone=%d SteerDeadzone=%d SteerLinearity=%d",
+        cfg.triggerPedals ? 1 : 0, cfg.accelAxis, cfg.accelInvert ? "(inv)" : "", cfg.brakeAxis,
+        cfg.brakeInvert ? "(inv)" : "", cfg.pedalDeadzone, cfg.steerDeadzone, cfg.steerLinearity);
 
     if (cfg.logGraphics) {
         InstallDirectDrawLogging();  // 版に依存しない

@@ -20,7 +20,21 @@ struct Config {
     // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
     // ゲームは サブタイプ 4(GAMEPAD)→Game Pad、6(WHEEL)→Steering Wheel、それ以外→Joystick として選択肢を出す
     int inputDeviceSubtype = 0;
+
+    // ---- 軸の加工（GetDeviceState の結果を書き換える）
+    // Joystick / Steering Wheel モードのゲームは Y 軸 1 本を「上=アクセル、下=ブレーキ」として読む。
+    // triggerPedals で、アクセル/ブレーキ用の別々の軸（DS4 なら R2=Ry, L2=Rx）から Y を合成する。
+    bool triggerPedals = false;
+    int accelAxis = 4;  // DIJOYSTATE の軸番号 0:X 1:Y 2:Z 3:Rx 4:Ry 5:Rz 6:Slider0 7:Slider1
+    int brakeAxis = 3;
+    bool accelInvert = false;  // 離したときに最大値になる軸（ホイールのペダル等）なら 1
+    bool brakeInvert = false;
+    int pedalDeadzone = 5;     // %。これ未満の踏み込みは 0 とみなし、両方 0 ならスティックの Y をそのまま通す
+    int steerDeadzone = 0;     // %。X 軸中央の遊び
+    int steerLinearity = 100;  // %。100 = 線形、>100 で中央付近が鈍く（出力 = 入力^(値/100)）
 };
+// DirectInput フックが必要な設定か
+bool InputHooksNeeded(const Config& c);
 Config LoadConfig(const std::wstring& iniPath);
 // DllMain で読み込んだ設定（DllMain 以降はいつでも参照可）
 const Config& GetConfig();

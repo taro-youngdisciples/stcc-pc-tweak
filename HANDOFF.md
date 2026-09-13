@@ -229,6 +229,10 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
   | SHARE OPTIONS / L3 R3 / PS タッチパッド | b8 b9 / b10 b11 / b12 b13 |
   - ゲームの Game Pad 設定の Button1 = b0(□)、Button2 = b1(×)
 - **F5 Device Settings で DS4 を繋ぐと、選択できるのは Keyboard と Game Pad のみ**（Joystick / SideWinder 系 / Steering Wheel（T2）/ Per4mer はグレーアウト）→ ゲームがデバイス種別（DIDEVTYPE サブタイプ=GAMEPAD）や既知名で選択肢を絞っている。**DLL で種別を JOYSTICK / WHEEL に見せればアナログモードを解放できる見込み**
+- **DLL でサブタイプを偽装（`[Input] DeviceType`）→ Joystick / Steering Wheel（T2）が選択可能に**。どちらも実機で「左スティック左右 = ステアリング、上下 = アクセル/ブレーキ（Y 軸 1 本）」、他のボタンは無効（2026-09-13）
+  - Joystick の設定タブ: アクセル = Stick Up、ブレーキ = Stick Down、シフト/決定/キャンセル/視点/スタートはボタン割当。調整タブ: ハンドル/アクセル/ブレーキの最大値と効き始め
+  - Steering Wheel の設定タブ: シフトアップ/ダウン = Down/Up、視点変更 Button1、スタート Button2、「アクセル及び決定 = アクセルペダル」「ブレーキ及びキャンセル = ブレーキペダル」
+  - → `[Input] TriggerPedals`: R2(Ry)/L2(Rx) から Y を合成する軸加工を実装（両方離していればスティックの Y をそのまま通す）。ステアリングのデッドゾーン/カーブも追加
 - **Steam 終了状態でゲーム中に切断は起きなかった**（2026-09-13 午後）。切断はこれまで全て「STCC 実行中 かつ Steam 起動中」→ ゲームの排他 Acquire と Steam の PS4 対応の競合が有力。当面 Steam は終了してテストする
 
 ### 次にやること

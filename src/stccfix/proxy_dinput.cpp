@@ -39,7 +39,7 @@ HRESULT WINAPI Proxy_DirectInputCreateA(HINSTANCE hinst, DWORD version, LPVOID* 
     Log("DirectInputCreateA(version=0x%lX) -> 0x%08lX iface=%p", version, static_cast<unsigned long>(hr),
         out ? *out : nullptr);
     const auto& cfg = stcc::GetConfig();
-    if (SUCCEEDED(hr) && out && *out && (cfg.logInput || cfg.inputDeviceSubtype != 0)) {
+    if (SUCCEEDED(hr) && out && *out && stcc::InputHooksNeeded(cfg)) {
         stcc::HookDirectInput(*out);
     }
     return hr;
