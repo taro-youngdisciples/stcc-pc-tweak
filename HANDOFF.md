@@ -238,8 +238,14 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - Phase 4 残課題: 切断時の自動再接続（ゲームは再列挙しない）、Steam 起動中の切断対策の確認（Steam 設定の PlayStation 対応 OFF で解消するか）、既定ログを LogInput=0 に
 - **Steam 終了状態でゲーム中に切断は起きなかった**（2026-09-13 午後）。切断はこれまで全て「STCC 実行中 かつ Steam 起動中」→ ゲームの排他 Acquire と Steam の PS4 対応の競合が有力。当面 Steam は終了してテストする
 
+### Phase 5a 高解像度化（2026-09-13）
+- dgVoodoo2 `Resolution` 強制で Direct3D は明確に高精細化。DirectDraw はソフトウェア描画の拡大なのでモザイク状（D3D 推奨）
+- **ゲームはメニューを 640x480、レースを Settings > Screen Mode の解像度（今回 320x240）で描く**。モード切替のたびに `0x436750` から `SetWindowPos` で窓をそのクライアントサイズへ戻す
+- stccfix `hooks_window.cpp`: 起動時に窓を自動拡大（`WindowScale=0` = 作業領域に収まる最大整数倍、4K で 2560x1920）、ドラッグ時 4:3 拘束、利用者サイズの記憶、`WM_WINDOWPOSCHANGING` で 640x480 / 320x240 要求を差し替え＋300ms 後に 1px ナッジで WM_SIZE を再通知。`[Debug] LogWindow` で SetWindowPos/MoveWindow の呼び出し元を記録
+- dgVoodoo `Resolution` は倍率（4x）だと 320x240 のレースが 1280x960 止まりになるため、固定 `2560x1920` に変更
+
 ### 次にやること
-- [ ] F5 で Joystick / Game Pad / Steering Wheel（T2）を選んだ場合の `GetDeviceState` と操作感を確認 → DLL での軸合成（L2/R2 → ペダル軸）の要否を決める
+- [ ] レース開始時の窓縮小が 320x240 対応で直ったか確認
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ

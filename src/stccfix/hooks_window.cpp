@@ -174,13 +174,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 break;
             case WM_WINDOWPOSCHANGING: {
-                // ゲームは Gfx_InitDirectDraw 以外の場所（レース開始時など）でも窓を 640x480 クライアントに戻す。
-                // 出どころを問わず「640x480 クライアントへのリサイズ要求」だけを設定サイズに差し替える
-                // （最大化や利用者のドラッグなど、他の大きさへの変更には触れない）
+                // ゲームは画面モードが変わるたびに（0x436750: メニューは 640x480、レースは Screen Mode 設定の
+                // 640x480 か 320x240）窓をそのクライアントサイズへ戻す。
+                // 出どころを問わず「ゲームの画面モードと同じクライアントサイズへのリサイズ要求」だけを設定サイズに差し替える
+                // （最大化や利用者のドラッグなど、他の大きさへの変更には触れない）。
+                // 幅が狭いとメニューバーが折り返して高さが変わるので、判定は幅を主に使う
                 auto* pos = reinterpret_cast<WINDOWPOS*>(lp);
                 if (g_hwnd == hwnd && !g_applying && pos && !(pos->flags & SWP_NOSIZE)) {
-                    const SIZE base = WindowSizeForClient(hwnd, kBaseW, kBaseH);
-                    if (std::abs(pos->cx - base.cx) <= 2 && std::abs(pos->cy - base.cy) <= 40) {
+                    auto matchesMode = [&](int cw, int ch) {
+                        const SIZE s = WindowSizeForClient(hwnd, cw, ch);
+                        return std::abs(pos->cx - s.cx) <= 2 && pos->cy >= s.cy - 2 && pos->cy <= s.cy + 80;
+                    };
+                    if (matchesMode(kBaseW, kBaseH) || matchesMode(kBaseW / 2, kBaseH / 2)) {
                         int cw = 0;
                         int ch = 0;
                         DesiredClientSize(hwnd, &cw, &ch);

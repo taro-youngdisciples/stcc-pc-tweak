@@ -123,6 +123,12 @@ confidence = "likely"
 note = "CreateViewport → AddViewport → SetViewport。D3D 初期化失敗後に呼ばれると device が NULL で 0x440F1E AV"
 
 [[function]]
+name = "Gfx_ResizeWindowForMode"
+addr = 0x00436600
+confidence = "likely"
+note = "画面モード切替時にウィンドウを新モードのクライアントサイズへ SetWindowPos（呼び出し 0x436750 = サイズ変更 flags 0x16、0x436765 = Z 順 flags 0x13）。メニューは 640x480、レースは g_ModeIndex（Settings > Screen Mode、例 320x240）。関数先頭は未確認（0x4366A7 で g_bFullscreen を参照）"
+
+[[function]]
 name = "Gfx_CreateClipper"
 addr = 0x00436FD0
 confidence = "confirmed"
