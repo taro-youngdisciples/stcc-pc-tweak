@@ -19,7 +19,11 @@ void Startup() {
     Log("stccfix build %s %s", __DATE__, __TIME__);
 
     const Config cfg = LoadConfig(dir + L"\\stccfix.ini");
-    Log("config: Windowed=%d", cfg.windowed ? 1 : 0);
+    Log("config: Windowed=%d LogGraphics=%d", cfg.windowed ? 1 : 0, cfg.logGraphics ? 1 : 0);
+
+    if (cfg.logGraphics) {
+        InstallDirectDrawLogging();  // 版に依存しない
+    }
 
     const GameVersion ver = DetectGameVersion();
     Log("game version: %s", GameVersionName(ver));
@@ -29,6 +33,9 @@ void Startup() {
     }
     if (cfg.windowed) {
         ApplyPatches(kWindowedJp102, std::size(kWindowedJp102));
+    }
+    if (cfg.logGraphics) {
+        InstallGameTraceHooks();
     }
 }
 
