@@ -193,6 +193,35 @@ addr = 0x00439390
 confidence = "confirmed"
 note = "cmd 32775: LoadMenu(0x81), g_UseDirect3D=0, 再初期化"
 
+[[function]]
+name = "D3DSettings_Load"
+addr = 0x0043A230
+confidence = "confirmed"
+note = "STCCD3D.DAT: WORD 0x100 + 0x14 バイト {g_UseDirect3D, opt[0], opt[1], opt[2], opt[3]}（opt は 0x43C880/0x43C890 で set/get）。無ければ UseDirect3D=0, opt=1"
+
+[[function]]
+name = "D3DSettings_Save"
+addr = 0x0043A350
+confidence = "confirmed"
+
+[[function]]
+name = "D3D_Init"
+addr = 0x00433B20
+confidence = "confirmed"
+note = "QI(IID_IDirect3D2) → D3D_SelectDevice → ... 失敗すると Gfx_InitDirectDraw が文字列 0xEF73「Direct3Dモードでは起動できません。」を出して終了"
+
+[[function]]
+name = "D3D_SelectDevice"
+addr = 0x00433DD0
+confidence = "confirmed"
+note = "IDirect3D2::Initialize? (+0xC) → EnumDevices (+0x20, cb 0x435150) → 0x434DE0 → 0x433ED0 → 0x434960 のいずれかが失敗すると false"
+
+[[global]]
+name = "g_pDirect3D2"
+addr = 0x004D1458
+type = "IDirect3D2*"
+confidence = "confirmed"
+
 [[global]]
 name = "g_MenuMode"
 addr = 0x0056C194
