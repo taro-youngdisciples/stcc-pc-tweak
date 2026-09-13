@@ -254,8 +254,15 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - IDirect3DDevice2 の vtable 順に注意（GetCaps の後に SwapTextureHandles/GetStats/AddViewport/DeleteViewport/NextViewport）。取り違えで起動不能になった
 - **方針: アナモルフィック方式**。DLL が TL 頂点の x を画面中心から (4/3)/(W/H) 倍に縮めたコピーを渡し、窓を W:H にして dgVoodoo に横へ引き伸ばさせる（`[Display] AspectRatio`、dgVoodoo `Resolution` も同比率に）。残課題: 4:3 前提のカリングによる画面端の湧き、HUD の配置、全画面背景
 
+- **ユーザー確認（2026-09-13）: 16:9 で全体に違和感なし**。空（x が 0..640 ぴったりの全幅ポリゴン）が中央 75% に縮んで左右が黒抜け → 全幅ポリゴンは縮めず `WideBackground=extend`（u を 1/k 倍に拡張）で解消を確認
+- HUD（Qualifying、タイム、速度計）は画面端に出たまま横に伸びている → TL 頂点（DrawPrimitive）ではない
+  - ログ: Blt は毎フレーム 1 回だけ（転送先 = 窓クライアント全体 = 表示用の転送）、BltFast 0 回 → HUD は Blt でもない
+  - 残る候補は描画先サーフェスを Lock してピクセルを直接書くソフトウェアスプライト描画（Saturn VDP1 相当）。Lock 呼び出し元の集計で特定する
+- 軽微（ユーザー判断で当面許容）: コース沿いの観客席などが画面端で出現するのが少し気になる（4:3 前提のカリング/LOD）、路面の継ぎ目がわずかに見える
+
 ### 次にやること
-- [ ] AspectRatio=16:9 の見た目確認（スクリーンショット）→ カリング解析へ
+- [ ] HUD の横伸び補正（Blt/BltFast の転送先矩形を横に縮める or 端に寄せる）
+- [ ] （任意）カリング幅の拡張、路面の継ぎ目
 - [ ] Phase 4 残課題（自動再接続、Steam の PS4 対応 OFF 確認）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）

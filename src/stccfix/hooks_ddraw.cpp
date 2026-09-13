@@ -10,6 +10,8 @@
 #include <ddraw.h>
 #include <d3d.h>
 
+#include <intrin.h>
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -263,6 +265,15 @@ struct DrawStats {
     long bltFast = 0;
     long bltMinX = 1000000, bltMaxX = -1000000;  // Blt/BltFast の転送先 x 範囲
     long bltMinW = 1000000, bltMaxW = -1000000;  // 転送先の幅
+    // Lock の呼び出し元（ゲーム側の戻りアドレス）ごとの回数。HUD 等のソフトウェア描画ルーチン特定用
+    struct Caller {
+        void* addr;
+        long count;
+        long w;  // ロックした面の幅（テクスチャか描画先かの目安）
+        long h;
+    };
+    Caller lockCallers[16] = {};
+    long locks = 0;
     float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f;
     float minZ = 1e9f, maxZ = -1e9f, minRhw = 1e9f, maxRhw = -1e9f;
 };
@@ -309,6 +320,17 @@ void FlushDrawStatsLocked() {
             g_draw.bgQuads);
         Log("[blt/s] Blt=%ld BltFast=%ld dest x[%ld..%ld] w[%ld..%ld]", g_draw.blt, g_draw.bltFast,
             g_draw.bltMinX, g_draw.bltMaxX, g_draw.bltMinW, g_draw.bltMaxW);
+        if (g_draw.locks > 0) {
+            std::string callers;
+            for (const auto& c : g_draw.lockCallers) {
+                if (c.addr) {
+                    char b[64];
+                    std::snprintf(b, sizeof(b), " %p:%ld(%ldx%ld)", c.addr, c.count, c.w, c.h);
+                    callers += b;
+                }
+            }
+            Log("[lock/s] Lock=%ld callers:%s", g_draw.locks, callers.c_str());
+        }
     }
     g_draw = DrawStats{};
     g_draw.windowStart = now;
@@ -533,6 +555,29 @@ void AccumulateBlt(bool fast, long x, long w) {
     ReleaseSRWLockExclusive(&g_drawLock);
 }
 
+// IDirectDrawSurface::Lock (index 25)。呼び出し元アドレスを集計する（__declspec(noinline) で戻りアドレスを正しく取る）
+__declspec(noinline) HRESULT STDMETHODCALLTYPE Surf_Lock(IDirectDrawSurface* self, LPRECT rect, LPDDSURFACEDESC desc,
+                                                         DWORD flags, HANDLE ev) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, LPRECT, LPDDSURFACEDESC, DWORD, HANDLE)>(self, 25);
+    HRESULT hr = fn(self, rect, desc, flags, ev);
+    if (GetConfig().logGraphics && SUCCEEDED(hr) && desc) {
+        void* caller = _ReturnAddress();
+        AcquireSRWLockExclusive(&g_drawLock);
+        ++g_draw.locks;
+        for (auto& c : g_draw.lockCallers) {
+            if (c.addr == caller || !c.addr) {
+                c.addr = caller;
+                ++c.count;
+                c.w = static_cast<long>(desc->dwWidth);
+                c.h = static_cast<long>(desc->dwHeight);
+                break;
+            }
+        }
+        ReleaseSRWLockExclusive(&g_drawLock);
+    }
+    return hr;
+}
+
 HRESULT STDMETHODCALLTYPE Surf_Blt(IDirectDrawSurface* self, LPRECT dest, LPDIRECTDRAWSURFACE src, LPRECT srcRect,
                                    DWORD flags, LPDDBLTFX fx) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, LPRECT, LPDIRECTDRAWSURFACE, LPRECT, DWORD, LPDDBLTFX)>(self, 5);
@@ -603,6 +648,7 @@ void HookSurface(IDirectDrawSurface* s) {
     PatchVtable(s, 3, Surf_AddAttachedSurface, "Surface::AddAttachedSurface");
     PatchVtable(s, 5, Surf_Blt, "Surface::Blt");
     PatchVtable(s, 7, Surf_BltFast, "Surface::BltFast");
+    PatchVtable(s, 25, Surf_Lock, "Surface::Lock");
     PatchVtable(s, 12, Surf_GetAttachedSurface, "Surface::GetAttachedSurface");
     PatchVtable(s, 28, Surf_SetClipper, "Surface::SetClipper");
 }
