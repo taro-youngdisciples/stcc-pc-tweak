@@ -8,6 +8,8 @@
 
 #include <MinHook.h>
 
+#include <intrin.h>
+
 #include <cstdlib>
 
 namespace stcc {
@@ -25,6 +27,31 @@ HWND g_hwnd = nullptr;
 bool g_applying = false;  // 自分で SetWindowPos している最中は WM_SIZE を記録しない
 int g_userClientW = 0;    // 利用者がリサイズしたクライアントサイズ（0 = 未設定）
 int g_userClientH = 0;
+bool g_inSizeMove = false;
+
+// 640x480 への要求を差し替えた少し後に、利用者のリサイズと同じ通知をゲームへ届け直すためのタイマー
+constexpr UINT_PTR kNudgeTimerId = 0x53545743;  // 'STWC'
+constexpr UINT kNudgeDelayMs = 300;
+
+// ---- 調査用: user32 の窓サイズ変更 API を呼び出し元つきで記録（[Debug] LogWindow）
+using SetWindowPosFn = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
+using MoveWindowFn = BOOL(WINAPI*)(HWND, int, int, int, int, BOOL);
+SetWindowPosFn g_origSetWindowPos = nullptr;
+MoveWindowFn g_origMoveWindow = nullptr;
+
+BOOL WINAPI Hook_SetWindowPos(HWND hwnd, HWND after, int x, int y, int cx, int cy, UINT flags) {
+    if (hwnd == g_hwnd && !g_applying && GetConfig().logWindow) {
+        Log("window: SetWindowPos(%d,%d %dx%d flags=0x%X) caller=%p", x, y, cx, cy, flags, _ReturnAddress());
+    }
+    return g_origSetWindowPos(hwnd, after, x, y, cx, cy, flags);
+}
+
+BOOL WINAPI Hook_MoveWindow(HWND hwnd, int x, int y, int cx, int cy, BOOL repaint) {
+    if (hwnd == g_hwnd && !g_applying && GetConfig().logWindow) {
+        Log("window: MoveWindow(%d,%d %dx%d) caller=%p", x, y, cx, cy, _ReturnAddress());
+    }
+    return g_origMoveWindow(hwnd, x, y, cx, cy, repaint);
+}
 
 HWND GameWindow() {
     return *reinterpret_cast<HWND*>(kHWndMain);
@@ -162,12 +189,42 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                             Log("window: game requested %dx%d, replaced with %ldx%ld", pos->cx, pos->cy, want.cx, want.cy);
                             pos->cx = want.cx;
                             pos->cy = want.cy;
+                            // ゲームは初期化中に自前の 640x480 で描画先を決めることがあるので、落ち着いた頃に通知し直す
+                            SetTimer(hwnd, kNudgeTimerId, kNudgeDelayMs, nullptr);
                         }
                     }
                 }
                 break;
             }
+            case WM_TIMER:
+                if (wp == kNudgeTimerId) {
+                    KillTimer(hwnd, kNudgeTimerId);
+                    // 1px 縮めて戻す。利用者がドラッグしたときと同じ WM_SIZE がゲームと dgVoodoo に届く
+                    RECT wr{};
+                    GetWindowRect(hwnd, &wr);
+                    const int w = wr.right - wr.left;
+                    const int h = wr.bottom - wr.top;
+                    g_applying = true;
+                    SetWindowPos(hwnd, nullptr, 0, 0, w, h - 1, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+                    SetWindowPos(hwnd, nullptr, 0, 0, w, h, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+                    g_applying = false;
+                    RECT client{};
+                    GetClientRect(hwnd, &client);
+                    Log("window: nudged size notification (client %ldx%ld)", client.right, client.bottom);
+                    return 0;
+                }
+                break;
+            case WM_ENTERSIZEMOVE:
+                g_inSizeMove = true;
+                break;
+            case WM_SIZE:
+                if (cfg.logWindow && !g_inSizeMove) {
+                    Log("window: WM_SIZE type=%u %ux%u%s", static_cast<unsigned>(wp), LOWORD(lp), HIWORD(lp),
+                        g_applying ? " (stccfix)" : "");
+                }
+                break;
             case WM_EXITSIZEMOVE: {
+                g_inSizeMove = false;
                 // 利用者のドラッグ操作が終わったときだけ記録する
                 // （ゲーム自身の再初期化による 640x480 への SetWindowPos を「利用者の大きさ」と誤認しないため）
                 RECT client{};
@@ -230,6 +287,21 @@ void InstallWindowHooks() {
         st = MH_EnableHook(target);
     }
     Log("window hook Gfx_InitDirectDraw @0x%08X: %s", static_cast<unsigned>(kGfxInitDirectDraw), MH_StatusToString(st));
+
+    if (GetConfig().logWindow) {
+        // user32 は exe の静的 import なのでロード済み
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        auto hookApi = [&](const char* name, LPVOID detour, LPVOID* orig) {
+            LPVOID fn = user32 ? static_cast<LPVOID>(GetProcAddress(user32, name)) : nullptr;
+            MH_STATUS s = fn ? MH_CreateHook(fn, detour, orig) : MH_ERROR_FUNCTION_NOT_FOUND;
+            if (s == MH_OK) {
+                s = MH_EnableHook(fn);
+            }
+            Log("window hook user32!%s: %s", name, MH_StatusToString(s));
+        };
+        hookApi("SetWindowPos", &Hook_SetWindowPos, reinterpret_cast<LPVOID*>(&g_origSetWindowPos));
+        hookApi("MoveWindow", &Hook_MoveWindow, reinterpret_cast<LPVOID*>(&g_origMoveWindow));
+    }
 }
 
 }  // namespace stcc

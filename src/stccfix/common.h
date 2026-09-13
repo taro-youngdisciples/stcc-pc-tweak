@@ -20,6 +20,7 @@ struct Config {
     bool rememberWindowSize = true;  // 利用者がリサイズした大きさを、ゲームの再初期化後も維持
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
+    bool logWindow = false;    // 窓サイズ変更（SetWindowPos/MoveWindow の呼び出し元、WM_SIZE）をログ
     // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
     // ゲームは サブタイプ 4(GAMEPAD)→Game Pad、6(WHEEL)→Steering Wheel、それ以外→Joystick として選択肢を出す
     int inputDeviceSubtype = 0;
