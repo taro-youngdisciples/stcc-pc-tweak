@@ -43,9 +43,9 @@ void Log(const char* fmt, ...) {
 
     EnterCriticalSection(&g_lock);
     DWORD written = 0;
+    // FlushFileBuffers は呼ばない。WriteFile の時点で OS のキャッシュに入るので、
+    // ゲームプロセスが落ちてもログは残る（毎行フラッシュはシーン切替時のラグ要因だった）
     WriteFile(g_file, buf, static_cast<DWORD>(len), &written, nullptr);
-    // クラッシュ調査用に毎行フラッシュする（ログ量が増えたら見直す）
-    FlushFileBuffers(g_file);
     LeaveCriticalSection(&g_lock);
 }
 

@@ -254,7 +254,13 @@ HRESULT STDMETHODCALLTYPE D3D2_EnumDevices(IDirect3D2* self, LPD3DENUMDEVICESCAL
 HRESULT STDMETHODCALLTYPE D3D2_CreateViewport(IDirect3D2* self, LPDIRECT3DVIEWPORT2* out, IUnknown* outer) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3D2*, LPDIRECT3DVIEWPORT2*, IUnknown*)>(self, 6);
     HRESULT hr = fn(self, out, outer);
-    Log("IDirect3D2::CreateViewport -> 0x%08lX", static_cast<unsigned long>(hr));
+    // ゲームは毎フレーム viewport を作り直す（D3D_SetupViewport_Inner 0x440EE0）ので、最初の数回と失敗だけ記録する
+    static LONG calls = 0;
+    LONG n = InterlockedIncrement(&calls);
+    if (n <= 3 || FAILED(hr)) {
+        Log("IDirect3D2::CreateViewport #%ld -> 0x%08lX%s", n, static_cast<unsigned long>(hr),
+            n == 3 ? "（以降は失敗時のみ記録）" : "");
+    }
     return hr;
 }
 

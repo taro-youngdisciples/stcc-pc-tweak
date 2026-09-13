@@ -187,8 +187,21 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - [x] ウィンドウ起動パッチを DLL のメモリパッチ化（`stccfix.ini [Display] Windowed=1`）。**原本 exe + DLL で、ウィンドウ・メニューバー・表示・BGM・速度・正常終了すべて OK を確認**。テスト exe は `D:\Games\STCC_work\testexe\` に退避
 - ログで `DirectInputCreateA(version=0x500)` が起動中に2回呼ばれることを確認（同じインターフェースポインタ）
 
+- [x] MinHook v1.3.4 導入（`third_party/minhook` サブモジュール）
+- [x] DirectDraw/Direct3D 呼び出しログ（`hooks_ddraw.cpp`、vtable 差し替え）とゲーム側 D3D 初期化関数の戻り値ログ（`hooks_game.cpp`、naked デトア）。`stccfix.ini [Debug] LogGraphics`
+- [x] **ウィンドウ + Direct3D の失敗原因を特定・修正**: ウィンドウ時の描画先が SYSTEMMEMORY で作られ `CreateDevice(HAL)` が `D3DERR_SURFACENOTINVIDMEM`。`0x436548` を VIDEOMEMORY|3DDEVICE にパッチ（`[Display] D3DWindowedVideoMemory=1`）
+- **ユーザー確認（2026-09-13）: ウィンドウ + Direct3D で起動・プレイ・終了・D3D のまま再起動すべて OK。** シーン切り替え時に軽いラグ感あり
+  - ログ解析: シーン切替で約450枚のテクスチャを数秒で一括作成、さらに **`IDirect3D2::CreateViewport` が毎フレーム（80〜110回/秒）呼ばれる**（ゲームが viewport を毎フレーム作り直している）
+  - ログを毎行 `FlushFileBuffers` していたのがラグ要因と推定 → フラッシュ廃止、CreateViewport ログは最初の3回と失敗時のみに
+  - 毎フレームの viewport 再生成自体も将来の最適化候補（DLL で使い回す）
+
+### マイルストーン1 状況
+**達成**: 原本 exe + `dinput.dll`(stccfix) + dgVoodoo2 で、Win11 マルチモニタ環境でウィンドウ表示・メニュー・DirectDraw/Direct3D 切替・BGM(CD-DA)・正常終了が動く。
+残課題: シーン切替のラグ、CD 不要化（MCI フック）、stcc.ini の VirtualStore 対策、フレームリミッタを DLL 側へ
+
 ### 次にやること
-- [ ] MinHook 導入（ユーザーのダウンロード許可待ち）
+- [ ] シーン切替ラグの切り分け（`LogGraphics=0` で比較）
+- [ ] Phase 4（ホイール）へ: DirectInput デバイス列挙・`GetDeviceState` 形式のログ、軸合成
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
