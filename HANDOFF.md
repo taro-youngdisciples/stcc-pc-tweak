@@ -216,6 +216,18 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - **BT 切断が頻発**: System ログに `HidBth` イベント 2（went out of range or became unresponsive）が 90 分で 9 回、13:24〜13:26 は約 25 秒ごと。ゲーム起動前にも 1 回。BT リンク層の問題で、ゲームが原因ではない。互換（非純正）DS4 + Steam 起動中（Steam の PS4 対応による拡張モード切替が疑わしい）
 - 切断後のゲーム挙動: `GetDeviceState` → `DIERR_INPUTLOST`、以後 `Acquire` が毎フレーム `DIERR_UNPLUGGED`(0x80040209)。**ゲームは再列挙しないので、再接続しても F5 を開き直すまで入力が戻らない** → DLL で自動再接続する候補
 - 切り分け用に `tools/joylog`（DirectInput8 非排他、切断/再接続・Steam 起動有無を記録）を作成
+- **joylog 結果（2026-09-13 14:31〜14:39、ゲーム非起動）: 切断 0 回**（Steam 起動中 約4.5分 / Steam 終了後 約3分とも）、同時間帯の HidBth イベントも無し → **Steam は原因ではない。切断はゲーム実行中にだけ起きている**（排他 Acquire やゲーム中の負荷など、要切り分け）
+- **DS4（互換品）の DirectInput 割り当て（確定）**
+  | 入力 | DirectInput |
+  |---|---|
+  | 左スティック 左右 / 上下 | X / Y（0..65535、上が 0） |
+  | 右スティック 左右 / 上下 | Z / Rz |
+  | L2 / R2 アナログ | Rx / Ry（0..65535） |
+  | 十字キー | POV0（上 0, 右 9000, 下 18000, 左 27000） |
+  | □ × ○ △ | b0 b1 b2 b3 |
+  | L1 R1 / L2 R2(デジタル) | b4 b5 / b6 b7 |
+  | SHARE OPTIONS / L3 R3 / PS タッチパッド | b8 b9 / b10 b11 / b12 b13 |
+  - ゲームの Game Pad 設定の Button1 = b0(□)、Button2 = b1(×)
 
 ### 次にやること
 - [ ] F5 で Joystick / Game Pad / Steering Wheel（T2）を選んだ場合の `GetDeviceState` と操作感を確認 → DLL での軸合成（L2/R2 → ペダル軸）の要否を決める
