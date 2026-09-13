@@ -1,0 +1,22 @@
+# 既知の STCC.EXE バージョン一覧。
+# ラッパーDLLは起動時に exe の SHA-256 を計算し、ここに載っている版にだけパッチを当てる。
+# アドレス表は版ごとに stcc_<version>.toml に分けて書く。
+
+[[version]]
+id       = "jp-1.00"
+label    = "日本版 1.00（ディスク収録 Stcc\\STCC.EXE）"
+sha256   = "897E9AE4F33B24068EC5E207B2C6D42BC5DF2CCB28F0A0D1EF4B22852817C6CA"
+size     = 946688
+linked   = "1998-01-12T07:47Z"
+supported = false   # 解析対象外。1.02 を当てること
+
+[[version]]
+id       = "jp-1.02"
+label    = "日本版 1.02（ディスク D3D\\updatej.exe 内の STCC.EXE）"
+sha256   = "6B4E92CA0A4C156363435A3425DA5704B2E64E9EF2218CF51449F9AA42C4319D"
+size     = 1009152
+linked   = "1998-04-14T06:55Z"
+supported = true    # 本プロジェクトの基準版
+
+# 参考: パッチ配布物
+# D3D\updatej.exe  sha256 = 32A6FDD2EE7A299D6F9533E746FD8A59739CC8AC329279CEA7BF531E75EDC8B4

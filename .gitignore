@@ -1,0 +1,69 @@
+# ---- ゲーム本体・アセット（著作物。絶対にコミットしない） ----
+*.exe
+*.EXE
+*.bin
+*.BIN
+*.cue
+*.iso
+*.img
+*.mdf
+*.mds
+*.ccd
+*.flac
+*.ogg
+*.wav
+*.WAV
+*.mrg
+*.MRG
+*.bmp
+*.BMP
+*.dat
+*.DAT
+*.vxd
+*.VxD
+stcc*.ini
+Stcc*.ini
+
+# ゲームのインストール先・作業用コピーをリポジトリ内に置いた場合の保険
+/game/
+/work/
+/_local/
+
+# ---- 解析生成物 ----
+# 棚卸し結果（ファイル名・ハッシュのみだが、ローカル環境依存なので管理外）
+/inventory/
+# Ghidra プロジェクト（知見は data/addresses/*.toml に書き出して管理する）
+*.gpr
+*.rep/
+*.lock
+*.lock~
+# メモリダンプ・ログ
+*.dmp
+*.mem
+*.log
+
+# ---- ビルド生成物 ----
+/build/
+/out/
+.vs/
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.ipch
+*.dll
+*.lib
+*.exp
+*.asi
+CMakeUserPresets.json
+
+# ---- Python ----
+__pycache__/
+*.pyc
+.venv/
+
+# ---- OS / エディタ ----
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
