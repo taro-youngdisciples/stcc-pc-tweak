@@ -157,8 +157,12 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - DirectInput は `DINPUT_VERSION 0x500`、ジョイスティックのみ列挙、最大2台
 - **dgVoodoo2 v2.87.4 の zip が Windows Defender に `Trojan:Win32/Kepavll!rfn` として検出・ブロックされた**（2026-09-13）。誤検知の可能性は高いが未確認。Defender の除外設定はユーザー判断事項。代替候補は DDrawCompat
 
+- 上記 dgVoodoo2 zip はユーザーが外部サービスでスキャンしてクリーンと判断し、復元済み（SHA-256 `74AEB464…DEA0956E`、GitHub 配布物とサイズ一致）。`D:\Games\STCC_work\dgVoodoo2\` に展開済み
+- 起動時に Windows の「DirectPlay が必要」ダイアログが出る（exe が `DPLAYX.dll` を静的 import しているため）→ Windows の機能として DirectPlay を有効化する
+
 ### 次にやること
-- [ ] ラッパー方針の決定（ラッパーなしで基準確認 / DDrawCompat / dgVoodoo2 をユーザーが許可）
+- [ ] ラッパーなしでの基準起動テスト（起動可否・表示・Graphics メニュー・BGM・速度）
+- [ ] `tools\wrapper.ps1 enable` で dgVoodoo2（`tools\dgvoodoo\dgVoodoo.conf`）を配置して同じ項目を比較
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
 - [ ] **Phase 3**: `dinput.dll` プロキシの骨格（CMake、MinHook、ini、ログ、版判定、DDraw/D3D/DInput/MCI 呼び出しログ）
 - [ ] `tools/run.ps1`（ビルド → 配置 → 起動 → ログ回収）
