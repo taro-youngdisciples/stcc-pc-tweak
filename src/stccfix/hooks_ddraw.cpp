@@ -519,16 +519,34 @@ HRESULT STDMETHODCALLTYPE Dev2_DrawIndexedPrimitive(IDirect3DDevice2* self, D3DP
 }
 
 // ---------------------------------------------------------------- IDirect3DViewport2（値が変わったときだけ記録）
+// ゲーム座標の viewport 矩形を横長の描画面用に直す。変えたら true
+//  - x=0 で 640/639 幅（画面全体）→ 描画面の全幅
+//  - 画面内の部分矩形 → TL 頂点と同じく offset だけ右へ
+bool WidenViewportRect(DWORD* x, DWORD* width) {
+    const DWORD baseW = static_cast<DWORD>(g_wide.baseW);
+    const DWORD off = static_cast<DWORD>(g_wide.offset);
+    if (*x == 0 && *width + 1 >= baseW && *width <= baseW) {
+        *width += 2 * off;
+        return true;
+    }
+    if (*x + *width <= baseW) {
+        *x += off;
+        return true;
+    }
+    return false;
+}
+
 HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPORT2 vp) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT2)>(self, 17);
-    // ワイド化: 640/639 幅の viewport を描画面の幅まで広げる（TL 頂点のクリップ範囲になる）
+    // ワイド化: 640/639 幅の viewport を描画面の幅まで広げる（TL 頂点のクリップ範囲になる）。
+    // それより小さい viewport（ノーズ視点のバックミラー等）は、中の TL 頂点と同じだけ右へずらす
     D3DVIEWPORT2 wide;
     LPD3DVIEWPORT2 pass = vp;
-    if (vp && g_wide.offset > 0 && vp->dwX == 0 && vp->dwWidth + 1 >= static_cast<DWORD>(g_wide.baseW) &&
-        vp->dwWidth <= static_cast<DWORD>(g_wide.baseW)) {
+    if (vp && g_wide.offset > 0) {
         wide = *vp;
-        wide.dwWidth += 2 * static_cast<DWORD>(g_wide.offset);
-        pass = &wide;
+        if (WidenViewportRect(&wide.dwX, &wide.dwWidth)) {
+            pass = &wide;
+        }
     }
     HRESULT hr = fn(self, pass);
     static D3DVIEWPORT2 last{};
@@ -545,11 +563,11 @@ HRESULT STDMETHODCALLTYPE Vp2_SetViewport(IDirect3DViewport2* self, LPD3DVIEWPOR
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT)>(self, 5);
     D3DVIEWPORT wide;
     LPD3DVIEWPORT pass = vp;
-    if (vp && g_wide.offset > 0 && vp->dwX == 0 && vp->dwWidth + 1 >= static_cast<DWORD>(g_wide.baseW) &&
-        vp->dwWidth <= static_cast<DWORD>(g_wide.baseW)) {
+    if (vp && g_wide.offset > 0) {
         wide = *vp;
-        wide.dwWidth += 2 * static_cast<DWORD>(g_wide.offset);
-        pass = &wide;
+        if (WidenViewportRect(&wide.dwX, &wide.dwWidth)) {
+            pass = &wide;
+        }
     }
     HRESULT hr = fn(self, pass);
     static D3DVIEWPORT last{};
