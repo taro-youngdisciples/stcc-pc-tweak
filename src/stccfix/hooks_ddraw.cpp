@@ -4,6 +4,7 @@
 // ラッパー（dgVoodoo 等）が複数インターフェースで実装を共有していても取り違えない。
 // 描画ループで毎フレーム呼ばれるメソッド（Lock/Blt/Flip 等）はフックしない。
 #include "common.h"
+#include "vtable_hook.h"
 
 #define DIRECT3D_VERSION 0x0500
 #include <ddraw.h>
@@ -11,60 +12,10 @@
 
 #include <cstdio>
 #include <cstring>
-#include <iterator>
 #include <string>
 
 namespace stcc {
 namespace {
-
-// ---------------------------------------------------------------- vtable 差し替え
-CRITICAL_SECTION g_cs;
-
-struct VtblSlot {
-    void** vtbl;
-    int index;
-    void* original;
-};
-VtblSlot g_slots[128];
-int g_slotCount = 0;
-
-void* FindOriginalLocked(void** vtbl, int index) {
-    for (int i = 0; i < g_slotCount; ++i) {
-        if (g_slots[i].vtbl == vtbl && g_slots[i].index == index) {
-            return g_slots[i].original;
-        }
-    }
-    return nullptr;
-}
-
-void PatchVtable(IUnknown* iface, int index, void* detour, const char* name) {
-    if (!iface) {
-        return;
-    }
-    void** vtbl = *reinterpret_cast<void***>(iface);
-    EnterCriticalSection(&g_cs);
-    if (!FindOriginalLocked(vtbl, index) && g_slotCount < static_cast<int>(std::size(g_slots))) {
-        DWORD oldProtect = 0;
-        if (VirtualProtect(&vtbl[index], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-            g_slots[g_slotCount++] = {vtbl, index, vtbl[index]};
-            vtbl[index] = detour;
-            VirtualProtect(&vtbl[index], sizeof(void*), oldProtect, &oldProtect);
-            Log("  hook %s: vtbl=%p[%d] orig=%p", name, static_cast<void*>(vtbl), index, g_slots[g_slotCount - 1].original);
-        } else {
-            Log("  hook %s: VirtualProtect 失敗 (%lu)", name, GetLastError());
-        }
-    }
-    LeaveCriticalSection(&g_cs);
-}
-
-template <class Fn>
-Fn Orig(void* self, int index) {
-    void** vtbl = *reinterpret_cast<void***>(self);
-    EnterCriticalSection(&g_cs);
-    void* p = FindOriginalLocked(vtbl, index);
-    LeaveCriticalSection(&g_cs);
-    return reinterpret_cast<Fn>(p);
-}
 
 // ---------------------------------------------------------------- 表示用ヘルパ
 std::string GuidStr(const GUID* g) {
@@ -406,7 +357,6 @@ bool PatchIat(HMODULE module, const char* dllName, void* target, void* detour) {
 }  // namespace
 
 void InstallDirectDrawLogging() {
-    InitializeCriticalSection(&g_cs);
     HMODULE ddraw = GetModuleHandleW(L"ddraw.dll");  // exe の静的 import なので既にマップ済み
     if (!ddraw) {
         Log("ddraw.dll が未ロードのため DirectDraw ログは無効");

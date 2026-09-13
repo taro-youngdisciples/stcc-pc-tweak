@@ -25,7 +25,10 @@ add_library(stccfix SHARED
   src/stccfix/config.cpp
   src/stccfix/patch.cpp
   src/stccfix/proxy_dinput.cpp
+  src/stccfix/vtable_hook.h
+  src/stccfix/vtable_hook.cpp
   src/stccfix/hooks_ddraw.cpp
+  src/stccfix/hooks_dinput.cpp
   src/stccfix/hooks_game.cpp
   src/stccfix/dllmain.cpp
   src/stccfix/dinput.def

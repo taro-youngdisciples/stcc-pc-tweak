@@ -199,9 +199,15 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 **達成**: 原本 exe + `dinput.dll`(stccfix) + dgVoodoo2 で、Win11 マルチモニタ環境でウィンドウ表示・メニュー・DirectDraw/Direct3D 切替・BGM(CD-DA)・正常終了が動く。
 残課題: シーン切替のラグ、CD 不要化（MCI フック）、stcc.ini の VirtualStore 対策、フレームリミッタを DLL 側へ
 
+- **ラグ解消をユーザー確認（2026-09-13）**。原因はログの毎行フラッシュだった
+
+### 進め方の合意（2026-09-13）
+1. **Phase 4: 入力** — 開発機のホイールは別PCのため、**Bluetooth 接続の PS4 互換コントローラ**を対象に DirectInput の軸加工基盤を作る（L2/R2 → 合成ペダル軸、スティックのデッドゾーン・カーブ）。ホイールは同じ基盤で後から対応
+2. **Phase 5a: 高解像度化** — dgVoodoo2 の `Resolution` 強制で先に安定させる
+3. **Phase 5b: ワイド化** — 投影・カリング・HUD の解析（§4-B）
+
 ### 次にやること
-- [ ] シーン切替ラグの切り分け（`LogGraphics=0` で比較）
-- [ ] Phase 4（ホイール）へ: DirectInput デバイス列挙・`GetDeviceState` 形式のログ、軸合成
+- [ ] Phase 4: DirectInput のデバイス列挙・データ形式・`GetDeviceState` をログ → ゲームの軸割り当てを特定 → DLL で軸合成
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ

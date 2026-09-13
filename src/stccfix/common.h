@@ -16,8 +16,15 @@ struct Config {
     bool windowed = true;      // g_bFullscreen の初期値を 0 にしてウィンドウで起動する
     bool d3dWindowedVideoMemory = true;  // ウィンドウ時の D3D 描画先を VIDEOMEMORY で作る（HAL デバイス作成失敗の修正）
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
+    bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
 };
 Config LoadConfig(const std::wstring& iniPath);
+// DllMain で読み込んだ設定（DllMain 以降はいつでも参照可）
+const Config& GetConfig();
+
+// ---------------------------------------------------------------- hooks_dinput.cpp
+// DirectInputCreate* が返した IDirectInput インターフェースにフックを掛ける（初回呼び出し時、DllMain 外）
+void HookDirectInput(void* directInput);
 
 // ---------------------------------------------------------------- patch.cpp
 struct BytePatch {

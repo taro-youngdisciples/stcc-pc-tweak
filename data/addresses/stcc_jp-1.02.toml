@@ -289,6 +289,63 @@ note = "DirectInputCreateA(hInst, 0x500, &g_pDirectInput) → EnumDevices(DIDEVT
 name = "Input_EnumJoystickCb"
 addr = 0x004685A0
 confidence = "confirmed"
+note = "DIDEVICEINSTANCE の dwDevType サブタイプを +0x89636C に、tszProductName を既知名表 g_KnownJoystickNames と比較した番号を +0x896370 に（該当なし -1、\"SEGA SATURN PAD\" なら 0）。その後 Input_SetupDevice。最大 2 台"
+
+[[function]]
+name = "Input_SetupDevice"
+addr = 0x004686F0
+confidence = "confirmed"
+note = "CreateDevice → QI(IDirectInputDevice2A) → SetDataFormat(DIJoystick, 0x50) → SetCooperativeLevel(hwnd, EXCLUSIVE|FOREGROUND=9) → GetCapabilities → RANGE: X 48..208, Y -160..160, (軸>2なら) Z 48..208 → FFB 対応なら ConstantForce 作成 → Acquire"
+
+[[function]]
+name = "Input_SetAxisRange"
+addr = 0x00468940
+confidence = "confirmed"
+note = "(dev, dwObj offset, lMin, lMax) → SetProperty(DIPROP_RANGE, DIPH_BYOFFSET)"
+
+[[function]]
+name = "Input_PollDevice"
+addr = 0x00468140
+confidence = "confirmed"
+note = "(index) → Poll → GetDeviceState(0x50)。呼び出し元 0x458EE9, 0x45B0A7, 0x45C0F5, 0x45D539, 0x468131"
+
+[[function]]
+name = "Input_CopyCaps"
+addr = 0x00468330
+confidence = "confirmed"
+note = "(index, out) DIDEVCAPS(0x2C) をコピー。呼び出し元 0x43ADF0"
+
+[[function]]
+name = "Input_GetDevType"
+addr = 0x00468310
+confidence = "confirmed"
+note = "戻り 3/8 のとき FFB を使う（FF_SetConstantForce 0x468220 / 0x468290）"
+
+[[function]]
+name = "FF_SetParameters"
+addr = 0x00468A50
+confidence = "confirmed"
+note = "IDirectInputEffect::SetParameters（方向・大きさ）"
+
+[[function]]
+name = "FF_CreateConstantForce"
+addr = 0x00468AD0
+confidence = "confirmed"
+note = "IDirectInputDevice2::CreateEffect(GUID_ConstantForce)"
+
+[[global]]
+name = "g_KnownJoystickNames"
+addr = 0x004BF4B0
+type = "char*[6]"
+confidence = "confirmed"
+note = "SideWinder game pad / 3D Pro / Precision Pro / Force Feedback Pro / DIforce2 Serial Joystick Device / Ultimate Per4mer"
+
+[[global]]
+name = "g_JoystickCaps"
+addr = 0x00896380
+type = "DIDEVCAPS[2] (0x44 刻みのデバイス構造体内)"
+confidence = "confirmed"
+note = "dwFlags(+4) の DIDC_FORCEFEEDBACK で FFB 判定、dwAxes(+0xC) で Z 軸レンジ設定の有無"
 
 [[global]]
 name = "g_pDirectInput"

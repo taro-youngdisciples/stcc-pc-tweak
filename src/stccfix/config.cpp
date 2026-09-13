@@ -9,6 +9,7 @@ Config LoadConfig(const std::wstring& iniPath) {
     c.d3dWindowedVideoMemory =
         GetPrivateProfileIntW(L"Display", L"D3DWindowedVideoMemory", c.d3dWindowedVideoMemory ? 1 : 0, ini) != 0;
     c.logGraphics = GetPrivateProfileIntW(L"Debug", L"LogGraphics", c.logGraphics ? 1 : 0, ini) != 0;
+    c.logInput = GetPrivateProfileIntW(L"Debug", L"LogInput", c.logInput ? 1 : 0, ini) != 0;
     return c;
 }
 

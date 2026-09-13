@@ -6,6 +6,7 @@ namespace stcc {
 namespace {
 
 HMODULE g_self = nullptr;
+Config g_config;
 
 // data/addresses/stcc_jp-1.02.toml の App_InitInstance_FullscreenInit
 constexpr BytePatch kWindowedJp102[] = {
@@ -28,9 +29,10 @@ void Startup() {
     LogInit(dir + L"\\stccfix.log");
     Log("stccfix build %s %s", __DATE__, __TIME__);
 
-    const Config cfg = LoadConfig(dir + L"\\stccfix.ini");
-    Log("config: Windowed=%d D3DWindowedVideoMemory=%d LogGraphics=%d", cfg.windowed ? 1 : 0,
-        cfg.d3dWindowedVideoMemory ? 1 : 0, cfg.logGraphics ? 1 : 0);
+    g_config = LoadConfig(dir + L"\\stccfix.ini");
+    const Config& cfg = g_config;
+    Log("config: Windowed=%d D3DWindowedVideoMemory=%d LogGraphics=%d LogInput=%d", cfg.windowed ? 1 : 0,
+        cfg.d3dWindowedVideoMemory ? 1 : 0, cfg.logGraphics ? 1 : 0, cfg.logInput ? 1 : 0);
 
     if (cfg.logGraphics) {
         InstallDirectDrawLogging();  // 版に依存しない
@@ -54,6 +56,10 @@ void Startup() {
 }
 
 }  // namespace
+
+const Config& GetConfig() {
+    return g_config;
+}
 
 std::wstring ModuleDirectory() {
     wchar_t path[MAX_PATH];
