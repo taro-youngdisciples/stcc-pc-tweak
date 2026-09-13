@@ -206,8 +206,15 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 2. **Phase 5a: 高解像度化** — dgVoodoo2 の `Resolution` 強制で先に安定させる
 3. **Phase 5b: ワイド化** — 投影・カリング・HUD の解析（§4-B）
 
+### Phase 4 調査結果（2026-09-13, DS4 v2 Bluetooth, VID 054C PID 09CC）
+- DirectInput 5 では `devType=0x10404`（JOYSTICK / サブタイプ GAMEPAD）、軸6・ボタン14・POV1、FFB なし。DS4 は既知名表に無いので汎用扱い
+- ゲームは起動時にデバイス作成・レンジ設定・Acquire まで行うが、**既定（Keyboard 選択）では `GetDeviceState` を一度も呼ばない**
+- 入力の選択は F5「Device Settings」（DIALOG 102/190）: Player 1/2 ごとに Keyboard / Game Pad / Joystick / SideWinder Game Pad / SideWinder 3D Pro Type / Steering Wheel（T2）/ Per4mer Racing Wheel、各「Next」で割り当てダイアログ（Game Pad=114, 設定=115/116, 調整=118/121）
+  - 116 には「アクセルペダル」「ブレーキペダル」、121 には「アクセルとブレーキはスロットルかスティックを割り当てないと調整出来ません」→ 軸割り当て式
+- テスト中に SHARE か OPTIONS 押下で BT 切断が1回発生（原因未確認）
+
 ### 次にやること
-- [ ] Phase 4: DirectInput のデバイス列挙・データ形式・`GetDeviceState` をログ → ゲームの軸割り当てを特定 → DLL で軸合成
+- [ ] F5 で Joystick / Game Pad / Steering Wheel（T2）を選んだ場合の `GetDeviceState` と操作感を確認 → DLL での軸合成（L2/R2 → ペダル軸）の要否を決める
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
