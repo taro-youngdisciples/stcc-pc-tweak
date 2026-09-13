@@ -120,7 +120,7 @@ note = "D3D_SelectDevice の CreateDevice 対象"
 name = "D3D_SetupViewport_Inner"
 addr = 0x00440EE0
 confidence = "likely"
-note = "CreateViewport → AddViewport → SetViewport。D3D 初期化失敗後に呼ばれると device が NULL で 0x440F1E AV"
+note = "毎フレーム: 旧 viewport を device->DeleteViewport(+0x1C)+Release → d3d->CreateViewport(+0x18) → device->AddViewport(+0x18) → viewport->SetViewport2(+0x44, D3DVIEWPORT2 0x2C) → device->SetCurrentViewport(+0x34)。D3D 初期化失敗後に呼ばれると device が NULL で 0x440F1E AV。IDirect3DDevice2 の vtable は GetCaps(3) の後に SwapTextureHandles(4)/GetStats(5)/AddViewport(6)… と続く点に注意"
 
 [[function]]
 name = "Gfx_ResizeWindowForMode"

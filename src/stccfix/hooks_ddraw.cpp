@@ -295,7 +295,7 @@ void FlushDrawStatsLocked() {
 }
 
 HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
-    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*)>(self, 6);
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*)>(self, 11);
     HRESULT hr = fn(self);
     AcquireSRWLockExclusive(&g_drawLock);
     ++g_draw.frames;
@@ -305,7 +305,7 @@ HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
 }
 
 HRESULT STDMETHODCALLTYPE Dev2_SetRenderState(IDirect3DDevice2* self, D3DRENDERSTATETYPE state, DWORD value) {
-    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DRENDERSTATETYPE, DWORD)>(self, 21);
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DRENDERSTATETYPE, DWORD)>(self, 23);
     AcquireSRWLockExclusive(&g_drawLock);
     ++g_draw.setRenderState;
     ReleaseSRWLockExclusive(&g_drawLock);
@@ -313,7 +313,7 @@ HRESULT STDMETHODCALLTYPE Dev2_SetRenderState(IDirect3DDevice2* self, D3DRENDERS
 }
 
 HRESULT STDMETHODCALLTYPE Dev2_SetTransform(IDirect3DDevice2* self, D3DTRANSFORMSTATETYPE state, LPD3DMATRIX m) {
-    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DTRANSFORMSTATETYPE, LPD3DMATRIX)>(self, 24);
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DTRANSFORMSTATETYPE, LPD3DMATRIX)>(self, 26);
     AcquireSRWLockExclusive(&g_drawLock);
     long n = ++g_draw.setTransform;
     ReleaseSRWLockExclusive(&g_drawLock);
@@ -328,7 +328,7 @@ HRESULT STDMETHODCALLTYPE Dev2_SetTransform(IDirect3DDevice2* self, D3DTRANSFORM
 
 HRESULT STDMETHODCALLTYPE Dev2_DrawPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
                                              LPVOID verts, DWORD count, DWORD flags) {
-    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, DWORD)>(self, 27);
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, DWORD)>(self, 29);
     AcquireSRWLockExclusive(&g_drawLock);
     ++g_draw.drawPrim;
     AccumulateVertices(vtype, verts, count);
@@ -339,7 +339,7 @@ HRESULT STDMETHODCALLTYPE Dev2_DrawPrimitive(IDirect3DDevice2* self, D3DPRIMITIV
 HRESULT STDMETHODCALLTYPE Dev2_DrawIndexedPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
                                                     LPVOID verts, DWORD vcount, LPWORD idx, DWORD icount, DWORD flags) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, LPWORD,
-                                               DWORD, DWORD)>(self, 28);
+                                               DWORD, DWORD)>(self, 30);
     AcquireSRWLockExclusive(&g_drawLock);
     ++g_draw.drawIndexed;
     AccumulateVertices(vtype, verts, vcount);
@@ -392,7 +392,7 @@ HRESULT CALLBACK EnumTexWrap(LPDDSURFACEDESC d, LPVOID p) {
 }
 
 HRESULT STDMETHODCALLTYPE Dev2_EnumTextureFormats(IDirect3DDevice2* self, LPD3DENUMTEXTUREFORMATSCALLBACK cb, LPVOID ctx) {
-    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, LPD3DENUMTEXTUREFORMATSCALLBACK, LPVOID)>(self, 4);
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, LPD3DENUMTEXTUREFORMATSCALLBACK, LPVOID)>(self, 9);
     Log("IDirect3DDevice2::EnumTextureFormats");
     EnumTexCtx c{cb, ctx};
     HRESULT hr = cb ? fn(self, EnumTexWrap, &c) : fn(self, cb, ctx);
@@ -450,15 +450,23 @@ void HookDirect3D2(IDirect3D2* d3d) {
     PatchVtable(d3d, 8, D3D2_CreateDevice, "IDirect3D2::CreateDevice");
 }
 
+// IDirect3DDevice2 の vtable 順（d3d.h）:
+//  0 QueryInterface  1 AddRef  2 Release  3 GetCaps  4 SwapTextureHandles  5 GetStats
+//  6 AddViewport  7 DeleteViewport  8 NextViewport  9 EnumTextureFormats  10 BeginScene  11 EndScene
+// 12 GetDirect3D 13 SetCurrentViewport 14 GetCurrentViewport 15 SetRenderTarget 16 GetRenderTarget
+// 17 Begin 18 BeginIndexed 19 Vertex 20 Index 21 End 22 GetRenderState 23 SetRenderState
+// 24 GetLightState 25 SetLightState 26 SetTransform 27 GetTransform 28 MultiplyTransform
+// 29 DrawPrimitive 30 DrawIndexedPrimitive 31 SetClipStatus 32 GetClipStatus
+// （ゲーム側 0x440EE0 の +0x18=AddViewport / +0x1C=DeleteViewport / +0x34=SetCurrentViewport と一致）
 void HookDevice2(IDirect3DDevice2* dev) {
     Log("hook IDirect3DDevice2 %p", static_cast<void*>(dev));
     PatchVtable(dev, 0, Any_QueryInterface, "QueryInterface");
-    PatchVtable(dev, 4, Dev2_EnumTextureFormats, "IDirect3DDevice2::EnumTextureFormats");
-    PatchVtable(dev, 6, Dev2_EndScene, "IDirect3DDevice2::EndScene");
-    PatchVtable(dev, 21, Dev2_SetRenderState, "IDirect3DDevice2::SetRenderState");
-    PatchVtable(dev, 24, Dev2_SetTransform, "IDirect3DDevice2::SetTransform");
-    PatchVtable(dev, 27, Dev2_DrawPrimitive, "IDirect3DDevice2::DrawPrimitive");
-    PatchVtable(dev, 28, Dev2_DrawIndexedPrimitive, "IDirect3DDevice2::DrawIndexedPrimitive");
+    PatchVtable(dev, 9, Dev2_EnumTextureFormats, "IDirect3DDevice2::EnumTextureFormats");
+    PatchVtable(dev, 11, Dev2_EndScene, "IDirect3DDevice2::EndScene");
+    PatchVtable(dev, 23, Dev2_SetRenderState, "IDirect3DDevice2::SetRenderState");
+    PatchVtable(dev, 26, Dev2_SetTransform, "IDirect3DDevice2::SetTransform");
+    PatchVtable(dev, 29, Dev2_DrawPrimitive, "IDirect3DDevice2::DrawPrimitive");
+    PatchVtable(dev, 30, Dev2_DrawIndexedPrimitive, "IDirect3DDevice2::DrawIndexedPrimitive");
 }
 
 void HookSurface(IDirectDrawSurface* s) {
