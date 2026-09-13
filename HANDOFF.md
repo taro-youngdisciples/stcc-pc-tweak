@@ -273,8 +273,12 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - **32:9 もユーザー確認（2026-09-13, 4K 画面で窓 3413x960、描画面 1706x480、dgVoodoo 3413x960）**: タイトル/メニューは中央 4:3 で左右は黒（ゴミなし）、レースは全幅に 3D、HUD は伸びずに中央。速度も問題なし
   - 比率の切り替えは `tools\aspect.ps1 <W:H> [-RenderHeight N]`（配置済み stccfix.ini の AspectRatio と dgVoodoo.conf の Resolution を同時に変更）
 
+- **HUD 端寄せ（`hooks_hud.cpp`、2026-09-13）**: Spr_RenderQueue(0x46D020) をフックし、3D を描いたフレームでスプライトを塊ごとに左端/中央/右端へ移動。描画関数は lpSurface + x*bpp + y*lPitch で書き、クリップは g_SprScreenW/H(0x10E4C40/44) だけを見るので、広い面の先頭と広い画面幅を一時的に渡す。`[Display] HudAnchor=edges|center`
+  - ユーザー確認（32:9）: PC モード・アーケードモードとも Qualifying 左端、COURSE RECORD/速度計/AT 右端で良好。ただしコースレコードの数字が大きなラップタイムと上下 1px 接して同じ塊になり中央に残った → 塊は「同じ行（縦に半分以上重なる）で横に近接」に変更
+  - 車選択（回転する 3D 車あり）とレース前のグリッド画面で一部（TRANSMISSION、NEXT Round 等）が右端へ → レース画面フラグ 0x56C190 も条件に追加（グリッド画面は残る可能性、優先度低）
+
 ### 次にやること
-- [ ] （推奨）HUD を画面端へ寄せる: 32:9 では HUD が中央に集まる。スプライトキュー（Spr_RenderQueue 0x46D020 / 登録 0x46CE10）の x を左右アンカーで調整。レンダラの 640 クリップの扱いを要調査
+- [ ] HUD 端寄せの改善版の確認（コースレコード数字、車選択画面）
 - [ ] （任意）カリング幅の拡張、路面の継ぎ目
 - [ ] Phase 4 残課題（自動再接続、Steam の PS4 対応 OFF 確認）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）

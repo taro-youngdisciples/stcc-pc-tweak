@@ -25,6 +25,9 @@ constexpr std::uintptr_t kSprScreenH = 0x010E4C44;      // g_SprScreenH
 constexpr std::uintptr_t kSprPatterns = 0x010E4C48;     // g_SprPatterns（12 バイト/件、+4 幅）
 constexpr std::uintptr_t kSprQueueCount = 0x010EBCC8;   // g_SprQueueCount
 constexpr std::uintptr_t kSprQueue = 0x010EBCCC;        // g_SprQueue（16 バイト/件）
+// レース画面モード中か（Gfx_GetModeSize がメニューの 640x480 固定か Screen Mode の解像度かを決めるフラグ）。
+// 車選択など 3D を描くメニューで HUD 寄せが働かないよう、3D 描画と合わせて判定する
+constexpr std::uintptr_t kRaceScreenFlag = 0x0056C190;
 
 #pragma pack(push, 1)
 struct SprEntry {
@@ -75,14 +78,16 @@ void AnchorQueue(const WideInfo& wi) {
         parent[i] = i;
     }
 
-    // 横に gapX 以内、縦に gapY 以内で接していれば同じ塊
+    // 同じ行（縦に高さの半分以上重なる）で、横に gapX 以内に並んでいれば同じ塊。
+    // 上下に 1px 接しているだけの別の表示（コースレコードの数字と大きなラップタイム等）はつなげない
     const int gapX = std::max(2, static_cast<int>(wi.baseW / 80));
-    const int gapY = std::max(1, static_cast<int>(wi.baseH / 480));
     for (int i = 0; i < count; ++i) {
         for (int j = i + 1; j < count; ++j) {
             const Box& a = boxes[i];
             const Box& b = boxes[j];
-            if (a.x0 - gapX < b.x1 && b.x0 - gapX < a.x1 && a.y0 - gapY < b.y1 && b.y0 - gapY < a.y1) {
+            const int overlapY = std::min(a.y1, b.y1) - std::max(a.y0, b.y0);
+            const int minH = std::min(a.y1 - a.y0, b.y1 - b.y0);
+            if (a.x0 - gapX < b.x1 && b.x0 - gapX < a.x1 && overlapY * 2 >= minH && minH > 0) {
                 const int ra = FindRoot(parent, i);
                 const int rb = FindRoot(parent, j);
                 if (ra != rb) {
@@ -122,7 +127,9 @@ void AnchorQueue(const WideInfo& wi) {
 
 void __cdecl Hook_SprRenderQueue(LPDDSURFACEDESC desc) {
     WideInfo wi{};
-    if (!desc || !GetWideInfo(&wi) || !LastLockHad3D() || desc->dwWidth != static_cast<DWORD>(wi.baseW)) {
+    const bool raceScreen = *reinterpret_cast<const int*>(kRaceScreenFlag) != 0;
+    if (!desc || !raceScreen || !GetWideInfo(&wi) || !LastLockHad3D() ||
+        desc->dwWidth != static_cast<DWORD>(wi.baseW)) {
         g_origRenderQueue(desc);
         return;
     }
