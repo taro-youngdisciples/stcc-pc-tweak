@@ -1,6 +1,6 @@
 # STCC 勝手移植プロジェクト — 引継ぎドキュメント
 
-最終更新: 2026-09-13（Phase 0 完了 / Phase 1 ほぼ完了）
+最終更新: 2026-09-13 夜（ホイール対応・枠なし全画面を別 PC TAROCOCKPIT で実施）
 このドキュメントは Claude Code / Cowork で作業を再開する際の起点です。
 新しいセッションを始めたら、まずこれを読ませてください。
 
@@ -289,6 +289,25 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
   3. `[Input] TriggerPedals=1` + `AccelAxis` / `BrakeAxis` / `AccelInvert` / `BrakeInvert` でペダルを Y 軸へ合成（DS4 用に作った仕組みをそのまま使う）
   4. 回転角: 当時は 200 度前後の想定。Fanatec 側の SEN（回転角）設定で絞るか、DLL にステアリング倍率（SteerGain）を追加
   5. FFB: ゲームは既知機種（SideWinder FF Pro 等、種別 3/8）にしか ConstantForce を作らない。DD ベースで手応えを出すには DLL 側で FFB を実装（§4-A のテレメトリ方式）。安全のため強さは控えめから
+
+### ホイール PC（TAROCOCKPIT）での作業結果（2026-09-13 夜）
+環境: モニタ 1 枚 5120x1440（32:9、125% スケーリング）、RTX 3060、FANATEC driver 0.53.1 + FanatecApp、互換 DS4 も USB/BT で接続
+- セットアップ: リポジトリと `D:\Games` はフォルダごとコピー済みだった。VS Build Tools 2026（18.10, MSVC 14.51, SDK 26100）を winget で導入、`.venv` は Python 3.14.2 で作り直し（pefile/capstone OK）、コピーされた `build\CMakeCache.txt` は削除して再構成
+- **マイルストーン2（ホイールでまともに走れる）達成**: CSL DD + ペダルで Steering Wheel (T2) モード、ステア・アクセル・ブレーキ OK（ユーザー確認）
+- 分かったこと
+  - DirectInput では "FANATEC Wheel" が 2 台（HID コレクション 2 つ）見え、2 台目は値が動かない。DS4 も同時に見える → `[Input] DeviceName=FANATEC#1` で 1 台だけゲームに見せる
+  - **ゲーム（DirectInput 5）の軸: X=ステア, Y=クラッチ, Z=アクセル, Rz=ブレーキ**（すべて離して最大）。joylog（DirectInput 8）では Y=アクセル に見えて食い違う → 軸は必ず `LogInput=1` の stccfix.log で決める
+  - 設定: `DeviceType=auto`（ネイティブで sub=6 WHEEL → T2 が選べる）, `TriggerPedals=1`, `AccelAxis=Z`, `BrakeAxis=Rz`, `AccelInvert=1`, `BrakeInvert=1`, `PedalDeadzone=2`
+  - ホイールでは Y の素通しをしない（Y=クラッチ離し=最大がブレーキ全開になっていた）。GetCapabilities の本来のサブタイプで判定
+  - 回転角: FanatecApp の SEN 1080 ではゲーム入力 48..208 のうち 123..151 しか使わない → **SEN 240 前後**で良好
+  - FFB: ゲームは T2 でも AUTOCENTER と ConstantForce を作るが、強さを更新するのは種別コード 3/8 だけで、他は初期値のエフェクトを Start するだけ（スタート時の変な力）→ `[Input] ForceFeedback=0` で DIDC_FORCEFEEDBACK を隠す。関数は toml に記録（FF_SetConstantForceA/B, FF_StartEffect 等）
+- ノーズ視点のバックミラー: 画面より小さい viewport が 4:3 位置のままで TL 頂点だけずれていた → 部分 viewport も offset（ユーザー確認で完璧）
+- **枠なし全画面** `[Display] BorderlessFullscreen=1` + `DpiAware=1`、dgVoodoo `Resolution=5120x1440`（`tools\aspect.ps1 32:9 -RenderHeight 1440`）
+  - DPI 非対応のままだと窓が 4096x1152 の仮想座標になる → DllMain で Per-Monitor V2 を宣言
+  - dgVoodoo は SetCooperativeLevel 時点の窓の形で表示先を決める → 枠外しは Gfx_InitDirectDraw の**前**に行う。ゲームの 640x480 要求はモニタ全体に固定、MFC の SetMenu（0x43C530 から）は保留
+  - **実行中の切り替えは不可**: Alt+Enter を試したが、窓→全画面で広げると dgVoodoo の表示が元の大きさのまま（縮めるのは追従）→ 起動時のみ。メニューが要るときは ini で 0
+  - 自動テスト: スクラッチの PowerShell（起動→CopyFromScreen→keybd_event→終了）で確認できた。今後も表示系の確認に使える
+- 残課題（ホイール）: FFB の自前実装（テレメトリ方式）、Fanatec の SEN をゲーム別プロファイルにするか DLL に SteerGain を持つか
 
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
