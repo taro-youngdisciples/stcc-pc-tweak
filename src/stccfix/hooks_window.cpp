@@ -8,6 +8,8 @@
 
 #include <MinHook.h>
 
+#include <cstdlib>
+
 namespace stcc {
 namespace {
 
@@ -50,12 +52,12 @@ void DesiredClientSize(HWND hwnd, int* cw, int* ch) {
     }
     int scale = cfg.windowScale;
     if (scale <= 0) {
-        // 自動: モニタ作業領域の 90% に収まる最大の整数倍
+        // 自動: モニタ作業領域（タスクバーを除く）に窓全体が収まる最大の整数倍
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
-        const int availW = (mi.rcWork.right - mi.rcWork.left) * 9 / 10;
-        const int availH = (mi.rcWork.bottom - mi.rcWork.top) * 9 / 10;
+        const int availW = mi.rcWork.right - mi.rcWork.left;
+        const int availH = mi.rcWork.bottom - mi.rcWork.top;
         const SIZE extra = WindowSizeForClient(hwnd, 0, 0);
         scale = 1;
         while (kBaseW * (scale + 1) + extra.cx <= availW && kBaseH * (scale + 1) + extra.cy <= availH) {
@@ -144,6 +146,27 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     return TRUE;
                 }
                 break;
+            case WM_WINDOWPOSCHANGING: {
+                // ゲームは Gfx_InitDirectDraw 以外の場所（レース開始時など）でも窓を 640x480 クライアントに戻す。
+                // 出どころを問わず「640x480 クライアントへのリサイズ要求」だけを設定サイズに差し替える
+                // （最大化や利用者のドラッグなど、他の大きさへの変更には触れない）
+                auto* pos = reinterpret_cast<WINDOWPOS*>(lp);
+                if (g_hwnd == hwnd && !g_applying && pos && !(pos->flags & SWP_NOSIZE)) {
+                    const SIZE base = WindowSizeForClient(hwnd, kBaseW, kBaseH);
+                    if (std::abs(pos->cx - base.cx) <= 2 && std::abs(pos->cy - base.cy) <= 40) {
+                        int cw = 0;
+                        int ch = 0;
+                        DesiredClientSize(hwnd, &cw, &ch);
+                        const SIZE want = WindowSizeForClient(hwnd, cw, ch);
+                        if (want.cx != pos->cx || want.cy != pos->cy) {
+                            Log("window: game requested %dx%d, replaced with %ldx%ld", pos->cx, pos->cy, want.cx, want.cy);
+                            pos->cx = want.cx;
+                            pos->cy = want.cy;
+                        }
+                    }
+                }
+                break;
+            }
             case WM_EXITSIZEMOVE: {
                 // 利用者のドラッグ操作が終わったときだけ記録する
                 // （ゲーム自身の再初期化による 640x480 への SetWindowPos を「利用者の大きさ」と誤認しないため）
