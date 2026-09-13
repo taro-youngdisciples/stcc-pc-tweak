@@ -279,8 +279,24 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 
   - ユーザー確認（改善版）: レース中のコースレコード数字も右端へ移動、車選択は中央に戻り良好。**レース前のグリッド画面は行ごとに左右へ散って崩れた** → 画面幅いっぱいのスプライト（区切り線・帯）があるフレームは「レイアウト画面」とみなし全体を中央のままにする
 
-### 次にやること
-- [ ] グリッド画面が中央表示に戻ったかの確認
+  - **ユーザー確認: グリッド画面も中央表示に戻った**（2026-09-13）。HUD 端寄せはレース中のみ・メニューとレイアウト画面は中央、で完成
+
+### 次にやること: ステアリングホイール対応（別 PC）
+- 対象: **Fanatec CSL DD Pro（ホイールベース）+ ペダル、シフターなし**。ホイールは開発機とは別の PC に接続されているので、そちらへ環境を移して作業する
+- 手順案
+  1. `tools\joylog` でデバイス名・軸・ボタンの割り当てを記録（ペダルがベース経由か USB 単体か、アクセル/ブレーキの軸と向き）
+  2. ゲームの Device Settings で出る選択肢の確認（ホイールとして列挙されれば Steering Wheel(T2)、されなければ `[Input] DeviceType=wheel`）
+  3. `[Input] TriggerPedals=1` + `AccelAxis` / `BrakeAxis` / `AccelInvert` / `BrakeInvert` でペダルを Y 軸へ合成（DS4 用に作った仕組みをそのまま使う）
+  4. 回転角: 当時は 200 度前後の想定。Fanatec 側の SEN（回転角）設定で絞るか、DLL にステアリング倍率（SteerGain）を追加
+  5. FFB: ゲームは既知機種（SideWinder FF Pro 等、種別 3/8）にしか ConstantForce を作らない。DD ベースで手応えを出すには DLL 側で FFB を実装（§4-A のテレメトリ方式）。安全のため強さは控えめから
+
+### 別 PC への移行チェックリスト
+- リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
+- ツール: Git、VS Build Tools（C++ x86）、Python 3.13 + `.venv`（`tools\requirements.txt`）。Ghidra + JDK 21 は解析が必要になったときだけ
+- ゲーム: ディスクイメージをマウントして `Setup.exe` → `D:\Games\STCC`（DirectX は入れない）→ v1.02 の `STCC.EXE` を上書き（ディスクの `D3D\updatej.exe` 内）→ DirectPlay の Windows 機能を有効化
+- dgVoodoo2 v2.87.4 を `D:\Games\STCC_work\dgVoodoo2` に展開（Defender が誤検知する場合あり）→ `tools\wrapper.ps1 enable`
+- `tools\build.ps1 -Deploy` → `stccfix.ini` を配置 → `tools\aspect.ps1 <比率>`
+- パス前提: `D:\Games\STCC`、`D:\Games\STCC_work`、`D:\Tools\ghidra_12.1.3_PUBLIC`（違う場合は各スクリプトの引数で指定）
 - [ ] （任意）カリング幅の拡張、路面の継ぎ目
 - [ ] Phase 4 残課題（自動再接続、Steam の PS4 対応 OFF 確認）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
