@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <cwchar>
 #include <iterator>
 
 namespace stcc {
@@ -17,6 +18,17 @@ int ParseAxis(const wchar_t* name, int fallback) {
 
 }  // namespace
 
+double WidescreenScale(const Config& c) {
+    if (c.aspectW <= 0 || c.aspectH <= 0) {
+        return 1.0;
+    }
+    return (4.0 / 3.0) / (static_cast<double>(c.aspectW) / c.aspectH);
+}
+
+bool GraphicsHooksNeeded(const Config& c) {
+    return c.logGraphics || WidescreenScale(c) != 1.0;
+}
+
 bool InputHooksNeeded(const Config& c) {
     return c.logInput || c.inputDeviceSubtype != 0 || c.triggerPedals || c.steerDeadzone > 0 || c.steerLinearity != 100;
 }
@@ -31,6 +43,14 @@ Config LoadConfig(const std::wstring& iniPath) {
     c.keepAspect = GetPrivateProfileIntW(L"Display", L"KeepAspect", c.keepAspect ? 1 : 0, ini) != 0;
     c.rememberWindowSize =
         GetPrivateProfileIntW(L"Display", L"RememberWindowSize", c.rememberWindowSize ? 1 : 0, ini) != 0;
+    wchar_t aspect[16];
+    GetPrivateProfileStringW(L"Display", L"AspectRatio", L"4:3", aspect, static_cast<DWORD>(std::size(aspect)), ini);
+    int aw = 0;
+    int ah = 0;
+    if (swscanf_s(aspect, L"%d:%d", &aw, &ah) == 2 && aw > 0 && ah > 0) {
+        c.aspectW = aw;
+        c.aspectH = ah;
+    }
     c.logGraphics = GetPrivateProfileIntW(L"Debug", L"LogGraphics", c.logGraphics ? 1 : 0, ini) != 0;
     c.logInput = GetPrivateProfileIntW(L"Debug", L"LogInput", c.logInput ? 1 : 0, ini) != 0;
     c.logWindow = GetPrivateProfileIntW(L"Debug", L"LogWindow", c.logWindow ? 1 : 0, ini) != 0;

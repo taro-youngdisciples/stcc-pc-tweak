@@ -247,8 +247,15 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - **ユーザー確認（2026-09-13）: レース開始でも窓が大きいまま維持。Screen Mode 640x480 のほうが 320x240 より明らかに綺麗** → 推奨設定は Direct3D + Screen Mode 640x480 16bit
 - **マイルストーン「4K で見やすい表示」達成**。残る見た目の課題: HUD・文字などの 2D スプライトは 640x480 素材の拡大なのでドットが粗い（素材由来、ワイド化時の HUD 配置と合わせて扱う）
 
+### Phase 5b ワイド化 調査結果（2026-09-13）
+- **ゲームは 3D も 2D も、自前で 640x480 画面座標へ投影した `D3DVT_TLVERTEX` を `IDirect3DDevice2::DrawPrimitive` で渡すだけ**（レース中 1.2〜2.5 万回/秒、4 頂点ずつ。SetTransform 0 回、sz は常に 0 = Z バッファ不使用、rhw 0.003〜2.67）。画面外にはみ出す大ポリゴンは x が ±数万に達し D3D がクリップ
+- viewport は毎フレーム作り直し、`SetViewport2` は 640x480 clip[-1, 0.75, 2, 1.5] と 639x479 の 2 種を交互（TL 頂点には影響しない）
+- exe に 320/240/160/120 の float/double 定数なし。画面サイズ変数 0x567A10/14 を読むのは DDraw 初期化と窓リサイズのみ → 投影パラメータは別に保持
+- IDirect3DDevice2 の vtable 順に注意（GetCaps の後に SwapTextureHandles/GetStats/AddViewport/DeleteViewport/NextViewport）。取り違えで起動不能になった
+- **方針: アナモルフィック方式**。DLL が TL 頂点の x を画面中心から (4/3)/(W/H) 倍に縮めたコピーを渡し、窓を W:H にして dgVoodoo に横へ引き伸ばさせる（`[Display] AspectRatio`、dgVoodoo `Resolution` も同比率に）。残課題: 4:3 前提のカリングによる画面端の湧き、HUD の配置、全画面背景
+
 ### 次にやること
-- [ ] Phase 5b ワイド化の解析（投影・カリング・HUD）
+- [ ] AspectRatio=16:9 の見た目確認（スクリーンショット）→ カリング解析へ
 - [ ] Phase 4 残課題（自動再接続、Steam の PS4 対応 OFF 確認）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）

@@ -40,8 +40,9 @@ void Startup() {
     Log("config: WindowScale=%d KeepAspect=%d RememberWindowSize=%d", cfg.windowScale, cfg.keepAspect ? 1 : 0,
         cfg.rememberWindowSize ? 1 : 0);
 
-    if (cfg.logGraphics) {
-        InstallDirectDrawLogging();  // 版に依存しない
+    Log("config: AspectRatio=%d:%d (widescreen x scale %.4f)", cfg.aspectW, cfg.aspectH, WidescreenScale(cfg));
+    if (GraphicsHooksNeeded(cfg)) {
+        InstallDirectDrawLogging();  // 版に依存しない（ワイド化の頂点加工もここから）
     }
 
     const GameVersion ver = DetectGameVersion();

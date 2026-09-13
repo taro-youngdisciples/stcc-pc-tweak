@@ -70,6 +70,12 @@ SIZE WindowSizeForClient(HWND hwnd, int cw, int ch) {
     return {rc.right - rc.left, rc.bottom - rc.top};
 }
 
+// 表示アスペクト比に合わせたクライアント幅（高さ基準。4:3 なら 640x480 の整数倍）
+int ClientWidthForHeight(int ch) {
+    const Config& cfg = GetConfig();
+    return (ch * cfg.aspectW + cfg.aspectH / 2) / cfg.aspectH;
+}
+
 void DesiredClientSize(HWND hwnd, int* cw, int* ch) {
     const Config& cfg = GetConfig();
     if (cfg.rememberWindowSize && g_userClientW > 0) {
@@ -79,7 +85,7 @@ void DesiredClientSize(HWND hwnd, int* cw, int* ch) {
     }
     int scale = cfg.windowScale;
     if (scale <= 0) {
-        // 自動: モニタ作業領域（タスクバーを除く）に窓全体が収まる最大の整数倍
+        // 自動: モニタ作業領域（タスクバーを除く）に窓全体が収まる最大の整数倍（高さ 480 基準）
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
@@ -87,12 +93,13 @@ void DesiredClientSize(HWND hwnd, int* cw, int* ch) {
         const int availH = mi.rcWork.bottom - mi.rcWork.top;
         const SIZE extra = WindowSizeForClient(hwnd, 0, 0);
         scale = 1;
-        while (kBaseW * (scale + 1) + extra.cx <= availW && kBaseH * (scale + 1) + extra.cy <= availH) {
+        while (ClientWidthForHeight(kBaseH * (scale + 1)) + extra.cx <= availW &&
+               kBaseH * (scale + 1) + extra.cy <= availH) {
             ++scale;
         }
     }
-    *cw = kBaseW * scale;
     *ch = kBaseH * scale;
+    *cw = ClientWidthForHeight(*ch);
 }
 
 void ApplyWindowSize(HWND hwnd) {
@@ -137,16 +144,17 @@ void ApplyWindowSize(HWND hwnd) {
     Log("window: client %ldx%ld (target %dx%d)", client.right - client.left, client.bottom - client.top, cw, ch);
 }
 
-// ドラッグ中の窓矩形を、クライアントが 4:3 になるよう補正する
+// ドラッグ中の窓矩形を、クライアントが表示アスペクト比（既定 4:3）になるよう補正する
 void ConstrainSizing(HWND hwnd, WPARAM edge, RECT* r) {
+    const Config& cfg = GetConfig();
     const SIZE extra = WindowSizeForClient(hwnd, 0, 0);
     int cw = (r->right - r->left) - extra.cx;
     int ch = (r->bottom - r->top) - extra.cy;
     const bool horizontalEdge = edge == WMSZ_TOP || edge == WMSZ_BOTTOM;
     if (horizontalEdge) {
-        cw = ch * kBaseW / kBaseH;
+        cw = ClientWidthForHeight(ch);
     } else {
-        ch = cw * kBaseH / kBaseW;
+        ch = cw * cfg.aspectH / cfg.aspectW;
     }
     const int ww = cw + extra.cx;
     const int wh = ch + extra.cy;

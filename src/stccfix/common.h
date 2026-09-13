@@ -18,6 +18,11 @@ struct Config {
     int windowScale = 0;             // ウィンドウのクライアントを 640x480 の何倍にするか。0 = モニタに収まる最大の整数倍
     bool keepAspect = true;          // ドラッグでのリサイズを 4:3 に拘束
     bool rememberWindowSize = true;  // 利用者がリサイズした大きさを、ゲームの再初期化後も維持
+    // 表示アスペクト比。4:3 以外ならアナモルフィック方式でワイド化する:
+    // ゲームが渡す投影済み TL 頂点を画面中心から横に (4/3)/(aspectW/aspectH) 倍へ縮め、
+    // 窓をこの比率にして dgVoodoo に横へ引き伸ばさせる
+    int aspectW = 4;
+    int aspectH = 3;
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
     bool logWindow = false;    // 窓サイズ変更（SetWindowPos/MoveWindow の呼び出し元、WM_SIZE）をログ
@@ -39,6 +44,10 @@ struct Config {
 };
 // DirectInput フックが必要な設定か
 bool InputHooksNeeded(const Config& c);
+// ワイド化の横方向縮小率（4:3 なら 1.0）
+double WidescreenScale(const Config& c);
+// DirectDraw/Direct3D フックが必要な設定か
+bool GraphicsHooksNeeded(const Config& c);
 Config LoadConfig(const std::wstring& iniPath);
 // DllMain で読み込んだ設定（DllMain 以降はいつでも参照可）
 const Config& GetConfig();

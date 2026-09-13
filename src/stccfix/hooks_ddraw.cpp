@@ -13,9 +13,20 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace stcc {
 namespace {
+
+// このファイルのフックはワイド化のためにログ無効でも常駐するので、記録は [Debug] LogGraphics=1 のときだけ行う。
+// 以降の Log(...) はすべて GLog(...) に置き換わる（(Log) と括弧で書くと本物を呼べる）
+template <class... Args>
+void GLog(const char* fmt, Args... args) {
+    if (GetConfig().logGraphics) {
+        (Log)(fmt, args...);
+    }
+}
+#define Log(...) GLog(__VA_ARGS__)
 
 // ---------------------------------------------------------------- 表示用ヘルパ
 std::string GuidStr(const GUID* g) {
@@ -294,9 +305,33 @@ void FlushDrawStatsLocked() {
     g_draw.windowStart = now;
 }
 
+// ---------------------------------------------------------------- ワイド化（アナモルフィック）
+// ゲームは自前で 640x480 に投影した TL 頂点だけで描く（SetTransform 0 回、DrawPrimitive + D3DVT_TLVERTEX）。
+// その x を画面中心から k 倍に縮めたコピーを渡し、窓側（16:9 等）で横に引き伸ばすと、縦の視野はそのままで横が広がる。
+// ゲームのカリングは 4:3 前提なので、画面端で物体が湧く問題はゲーム側の修正で別途対処する。
+float g_viewportCenterX = 320.0f;  // SetViewport2 で更新
+thread_local std::vector<D3DTLVERTEX> t_wideVerts;
+
+LPVOID WidenVertices(D3DVERTEXTYPE vtype, LPVOID verts, DWORD count) {
+    static const float k = static_cast<float>(WidescreenScale(GetConfig()));
+    if (k == 1.0f || vtype != D3DVT_TLVERTEX || !verts || count == 0) {
+        return verts;
+    }
+    const auto* src = static_cast<const D3DTLVERTEX*>(verts);
+    t_wideVerts.assign(src, src + count);
+    const float cx = g_viewportCenterX;
+    for (auto& v : t_wideVerts) {
+        v.sx = cx + (v.sx - cx) * k;
+    }
+    return t_wideVerts.data();
+}
+
 HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*)>(self, 11);
     HRESULT hr = fn(self);
+    if (!GetConfig().logGraphics) {
+        return hr;
+    }
     AcquireSRWLockExclusive(&g_drawLock);
     ++g_draw.frames;
     FlushDrawStatsLocked();
@@ -306,9 +341,11 @@ HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
 
 HRESULT STDMETHODCALLTYPE Dev2_SetRenderState(IDirect3DDevice2* self, D3DRENDERSTATETYPE state, DWORD value) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DRENDERSTATETYPE, DWORD)>(self, 23);
-    AcquireSRWLockExclusive(&g_drawLock);
-    ++g_draw.setRenderState;
-    ReleaseSRWLockExclusive(&g_drawLock);
+    if (GetConfig().logGraphics) {
+        AcquireSRWLockExclusive(&g_drawLock);
+        ++g_draw.setRenderState;
+        ReleaseSRWLockExclusive(&g_drawLock);
+    }
     return fn(self, state, value);
 }
 
@@ -329,28 +366,35 @@ HRESULT STDMETHODCALLTYPE Dev2_SetTransform(IDirect3DDevice2* self, D3DTRANSFORM
 HRESULT STDMETHODCALLTYPE Dev2_DrawPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
                                              LPVOID verts, DWORD count, DWORD flags) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, DWORD)>(self, 29);
-    AcquireSRWLockExclusive(&g_drawLock);
-    ++g_draw.drawPrim;
-    AccumulateVertices(vtype, verts, count);
-    ReleaseSRWLockExclusive(&g_drawLock);
-    return fn(self, prim, vtype, verts, count, flags);
+    if (GetConfig().logGraphics) {
+        AcquireSRWLockExclusive(&g_drawLock);
+        ++g_draw.drawPrim;
+        AccumulateVertices(vtype, verts, count);
+        ReleaseSRWLockExclusive(&g_drawLock);
+    }
+    return fn(self, prim, vtype, WidenVertices(vtype, verts, count), count, flags);
 }
 
 HRESULT STDMETHODCALLTYPE Dev2_DrawIndexedPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
                                                     LPVOID verts, DWORD vcount, LPWORD idx, DWORD icount, DWORD flags) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, LPWORD,
                                                DWORD, DWORD)>(self, 30);
-    AcquireSRWLockExclusive(&g_drawLock);
-    ++g_draw.drawIndexed;
-    AccumulateVertices(vtype, verts, vcount);
-    ReleaseSRWLockExclusive(&g_drawLock);
-    return fn(self, prim, vtype, verts, vcount, idx, icount, flags);
+    if (GetConfig().logGraphics) {
+        AcquireSRWLockExclusive(&g_drawLock);
+        ++g_draw.drawIndexed;
+        AccumulateVertices(vtype, verts, vcount);
+        ReleaseSRWLockExclusive(&g_drawLock);
+    }
+    return fn(self, prim, vtype, WidenVertices(vtype, verts, vcount), vcount, idx, icount, flags);
 }
 
 // ---------------------------------------------------------------- IDirect3DViewport2（値が変わったときだけ記録）
 HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPORT2 vp) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT2)>(self, 17);
     HRESULT hr = fn(self, vp);
+    if (vp && SUCCEEDED(hr) && vp->dwWidth >= 160) {
+        g_viewportCenterX = static_cast<float>(vp->dwX) + static_cast<float>(vp->dwWidth) * 0.5f;
+    }
     static D3DVIEWPORT2 last{};
     if (vp && std::memcmp(vp, &last, sizeof(last)) != 0) {
         last = *vp;
