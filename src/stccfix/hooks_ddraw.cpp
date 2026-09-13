@@ -80,6 +80,8 @@ void HookDirectDraw2(IDirectDraw2* dd);
 void HookDirect3D2(IDirect3D2* d3d);
 void HookDevice2(IDirect3DDevice2* dev);
 void HookSurface(IDirectDrawSurface* s);
+HRESULT STDMETHODCALLTYPE Vp2_SetViewport(IDirect3DViewport2* self, LPD3DVIEWPORT vp);
+HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPORT2 vp);
 
 void HookByIid(REFIID riid, void* obj) {
     if (!obj) {
@@ -212,6 +214,10 @@ HRESULT STDMETHODCALLTYPE D3D2_CreateViewport(IDirect3D2* self, LPDIRECT3DVIEWPO
         Log("IDirect3D2::CreateViewport #%ld -> 0x%08lX%s", n, static_cast<unsigned long>(hr),
             n == 3 ? "（以降は失敗時のみ記録）" : "");
     }
+    if (SUCCEEDED(hr) && out && *out) {
+        PatchVtable(*out, 5, Vp2_SetViewport, "IDirect3DViewport2::SetViewport");
+        PatchVtable(*out, 17, Vp2_SetViewport2, "IDirect3DViewport2::SetViewport2");
+    }
     return hr;
 }
 
@@ -225,6 +231,145 @@ HRESULT STDMETHODCALLTYPE D3D2_CreateDevice(IDirect3D2* self, REFCLSID clsid, LP
         out ? static_cast<void*>(*out) : nullptr);
     if (SUCCEEDED(hr) && out && *out) {
         HookDevice2(*out);
+    }
+    return hr;
+}
+
+// ---------------------------------------------------------------- IDirect3DDevice2: 描画統計（ワイド化調査用）
+// 毎フレーム呼ばれるメソッドは個別に記録せず、1 秒ごとに集計を出す
+struct DrawStats {
+    DWORD windowStart = 0;
+    long frames = 0;
+    long drawPrim = 0;
+    long drawIndexed = 0;
+    long vertices = 0;
+    long byVertexType[4] = {};  // 0:? 1:D3DVT_VERTEX 2:D3DVT_LVERTEX 3:D3DVT_TLVERTEX
+    long setTransform = 0;
+    long setRenderState = 0;
+    float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f;
+    float minZ = 1e9f, maxZ = -1e9f, minRhw = 1e9f, maxRhw = -1e9f;
+};
+DrawStats g_draw;
+SRWLOCK g_drawLock = SRWLOCK_INIT;
+
+void AccumulateVertices(D3DVERTEXTYPE type, LPVOID verts, DWORD count) {
+    if (type >= 0 && type < 4) {
+        g_draw.byVertexType[type] += 1;
+    }
+    g_draw.vertices += static_cast<long>(count);
+    if (type != D3DVT_TLVERTEX || !verts) {
+        return;
+    }
+    const auto* v = static_cast<const D3DTLVERTEX*>(verts);
+    for (DWORD i = 0; i < count; ++i) {
+        const D3DTLVERTEX& t = v[i];
+        g_draw.minX = t.sx < g_draw.minX ? t.sx : g_draw.minX;
+        g_draw.maxX = t.sx > g_draw.maxX ? t.sx : g_draw.maxX;
+        g_draw.minY = t.sy < g_draw.minY ? t.sy : g_draw.minY;
+        g_draw.maxY = t.sy > g_draw.maxY ? t.sy : g_draw.maxY;
+        g_draw.minZ = t.sz < g_draw.minZ ? t.sz : g_draw.minZ;
+        g_draw.maxZ = t.sz > g_draw.maxZ ? t.sz : g_draw.maxZ;
+        g_draw.minRhw = t.rhw < g_draw.minRhw ? t.rhw : g_draw.minRhw;
+        g_draw.maxRhw = t.rhw > g_draw.maxRhw ? t.rhw : g_draw.maxRhw;
+    }
+}
+
+void FlushDrawStatsLocked() {
+    const DWORD now = GetTickCount();
+    if (g_draw.windowStart == 0) {
+        g_draw.windowStart = now;
+        return;
+    }
+    if (now - g_draw.windowStart < 1000) {
+        return;
+    }
+    if (g_draw.frames > 0) {
+        Log("[draw/s] frames=%ld DP=%ld DIP=%ld verts=%ld vtype{1:%ld 2:%ld 3:%ld} SetTransform=%ld SetRenderState=%ld "
+            "TL x[%.1f..%.1f] y[%.1f..%.1f] z[%.4f..%.4f] rhw[%.5f..%.5f]",
+            g_draw.frames, g_draw.drawPrim, g_draw.drawIndexed, g_draw.vertices, g_draw.byVertexType[1],
+            g_draw.byVertexType[2], g_draw.byVertexType[3], g_draw.setTransform, g_draw.setRenderState, g_draw.minX,
+            g_draw.maxX, g_draw.minY, g_draw.maxY, g_draw.minZ, g_draw.maxZ, g_draw.minRhw, g_draw.maxRhw);
+    }
+    g_draw = DrawStats{};
+    g_draw.windowStart = now;
+}
+
+HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*)>(self, 6);
+    HRESULT hr = fn(self);
+    AcquireSRWLockExclusive(&g_drawLock);
+    ++g_draw.frames;
+    FlushDrawStatsLocked();
+    ReleaseSRWLockExclusive(&g_drawLock);
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Dev2_SetRenderState(IDirect3DDevice2* self, D3DRENDERSTATETYPE state, DWORD value) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DRENDERSTATETYPE, DWORD)>(self, 21);
+    AcquireSRWLockExclusive(&g_drawLock);
+    ++g_draw.setRenderState;
+    ReleaseSRWLockExclusive(&g_drawLock);
+    return fn(self, state, value);
+}
+
+HRESULT STDMETHODCALLTYPE Dev2_SetTransform(IDirect3DDevice2* self, D3DTRANSFORMSTATETYPE state, LPD3DMATRIX m) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DTRANSFORMSTATETYPE, LPD3DMATRIX)>(self, 24);
+    AcquireSRWLockExclusive(&g_drawLock);
+    long n = ++g_draw.setTransform;
+    ReleaseSRWLockExclusive(&g_drawLock);
+    static LONG logged = 0;
+    if (m && n == 1 && InterlockedIncrement(&logged) <= 6) {
+        Log("IDirect3DDevice2::SetTransform(state=%d) [%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f]",
+            static_cast<int>(state), m->_11, m->_12, m->_13, m->_14, m->_21, m->_22, m->_23, m->_24, m->_31, m->_32,
+            m->_33, m->_34, m->_41, m->_42, m->_43, m->_44);
+    }
+    return fn(self, state, m);
+}
+
+HRESULT STDMETHODCALLTYPE Dev2_DrawPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
+                                             LPVOID verts, DWORD count, DWORD flags) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, DWORD)>(self, 27);
+    AcquireSRWLockExclusive(&g_drawLock);
+    ++g_draw.drawPrim;
+    AccumulateVertices(vtype, verts, count);
+    ReleaseSRWLockExclusive(&g_drawLock);
+    return fn(self, prim, vtype, verts, count, flags);
+}
+
+HRESULT STDMETHODCALLTYPE Dev2_DrawIndexedPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
+                                                    LPVOID verts, DWORD vcount, LPWORD idx, DWORD icount, DWORD flags) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, LPWORD,
+                                               DWORD, DWORD)>(self, 28);
+    AcquireSRWLockExclusive(&g_drawLock);
+    ++g_draw.drawIndexed;
+    AccumulateVertices(vtype, verts, vcount);
+    ReleaseSRWLockExclusive(&g_drawLock);
+    return fn(self, prim, vtype, verts, vcount, idx, icount, flags);
+}
+
+// ---------------------------------------------------------------- IDirect3DViewport2（値が変わったときだけ記録）
+HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPORT2 vp) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT2)>(self, 17);
+    HRESULT hr = fn(self, vp);
+    static D3DVIEWPORT2 last{};
+    if (vp && std::memcmp(vp, &last, sizeof(last)) != 0) {
+        last = *vp;
+        Log("IDirect3DViewport2::SetViewport2 x=%lu y=%lu w=%lu h=%lu clip[%.3f %.3f %.3f %.3f] z[%.3f..%.3f] -> 0x%08lX",
+            vp->dwX, vp->dwY, vp->dwWidth, vp->dwHeight, vp->dvClipX, vp->dvClipY, vp->dvClipWidth, vp->dvClipHeight,
+            vp->dvMinZ, vp->dvMaxZ, static_cast<unsigned long>(hr));
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Vp2_SetViewport(IDirect3DViewport2* self, LPD3DVIEWPORT vp) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT)>(self, 5);
+    HRESULT hr = fn(self, vp);
+    static D3DVIEWPORT last{};
+    if (vp && std::memcmp(vp, &last, sizeof(last)) != 0) {
+        last = *vp;
+        Log("IDirect3DViewport2::SetViewport x=%lu y=%lu w=%lu h=%lu scale[%.3f %.3f] max[%.3f %.3f] z[%.3f..%.3f] -> 0x%08lX",
+            vp->dwX, vp->dwY, vp->dwWidth, vp->dwHeight, vp->dvScaleX, vp->dvScaleY, vp->dvMaxX, vp->dvMaxY,
+            vp->dvMinZ, vp->dvMaxZ, static_cast<unsigned long>(hr));
     }
     return hr;
 }
@@ -309,6 +454,11 @@ void HookDevice2(IDirect3DDevice2* dev) {
     Log("hook IDirect3DDevice2 %p", static_cast<void*>(dev));
     PatchVtable(dev, 0, Any_QueryInterface, "QueryInterface");
     PatchVtable(dev, 4, Dev2_EnumTextureFormats, "IDirect3DDevice2::EnumTextureFormats");
+    PatchVtable(dev, 6, Dev2_EndScene, "IDirect3DDevice2::EndScene");
+    PatchVtable(dev, 21, Dev2_SetRenderState, "IDirect3DDevice2::SetRenderState");
+    PatchVtable(dev, 24, Dev2_SetTransform, "IDirect3DDevice2::SetTransform");
+    PatchVtable(dev, 27, Dev2_DrawPrimitive, "IDirect3DDevice2::DrawPrimitive");
+    PatchVtable(dev, 28, Dev2_DrawIndexedPrimitive, "IDirect3DDevice2::DrawIndexedPrimitive");
 }
 
 void HookSurface(IDirectDrawSurface* s) {
