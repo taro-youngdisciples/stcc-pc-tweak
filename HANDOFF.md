@@ -181,10 +181,14 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 
 操作メモ: F3 = ポーズ/メニューモード切替（カーソル＋メニュー）、Esc = メニューモード解除、Alt+F4 = 終了、F5〜F9 = 各種設定ダイアログ
 
+### Phase 3 進捗（2026-09-13）
+- [x] `dinput.dll` プロキシ DLL の骨格（`src/stccfix/`、CMake Win32 静的CRT、`tools/build.ps1 -Deploy / -Remove`）
+- [x] 版判定（PE ヘッダ TimeDateStamp + SizeOfImage、書き換え前に元バイト照合）、`stccfix.log` 出力
+- [x] ウィンドウ起動パッチを DLL のメモリパッチ化（`stccfix.ini [Display] Windowed=1`）。**原本 exe + DLL で、ウィンドウ・メニューバー・表示・BGM・速度・正常終了すべて OK を確認**。テスト exe は `D:\Games\STCC_work\testexe\` に退避
+- ログで `DirectInputCreateA(version=0x500)` が起動中に2回呼ばれることを確認（同じインターフェースポインタ）
+
 ### 次にやること
-- [ ] **Phase 3**: `dinput.dll` プロキシ DLL の骨格（CMake + MinHook）
-  - 版判定（SHA-256）、ログ出力
-  - `g_bFullscreen` 初期化パッチ（0x43964D）を DLL のメモリパッチとして実装 → テスト exe を廃止
+- [ ] MinHook 導入（ユーザーのダウンロード許可待ち）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
