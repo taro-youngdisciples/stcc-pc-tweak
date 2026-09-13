@@ -147,10 +147,18 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 3. **アーカイブ**: 巨大1ファイルではなく、`Data\Bin\*.BIN`（242個）、`*.MRG`（25個）等の個別ファイル
 4. **セットアップ**: **32bit**。Win98 VM は必須ではない（比較が必要になったときだけ構築）
 
+- [x] Ghidra 12.1.3 導入（`D:\Tools\ghidra_12.1.3_PUBLIC`）、headless 解析（プロジェクト `D:\Games\STCC_work\ghidra\STCC`）、`tools/ghidra/` 整備
+- [x] 主要 import の呼び出し元と DDraw/DInput/MCI 初期化を逆コンパイル → `data/addresses/stcc_jp-1.02.toml`
+- [x] `D:\Games\STCC` へインストール（Win11 で `Setup.exe` 直接実行、DirectX なし）、差分ゼロ確認、設定は `C:\WINDOWS\stcc.ini`
+- [x] v1.02 適用（exe 手動上書き、ハッシュ確認済み）
+
+### 判明した重要事項（Phase 1〜2 途中）
+- ゲームは**ウィンドウモードを内蔵**（`g_bFullscreen`）。解像度表は 640x480 / 320x240 × 16bpp / 8bpp の4件のみ（`g_ModeTable @ 0x4BD530`）
+- DirectInput は `DINPUT_VERSION 0x500`、ジョイスティックのみ列挙、最大2台
+- **dgVoodoo2 v2.87.4 の zip が Windows Defender に `Trojan:Win32/Kepavll!rfn` として検出・ブロックされた**（2026-09-13）。誤検知の可能性は高いが未確認。Defender の除外設定はユーザー判断事項。代替候補は DDrawCompat
+
 ### 次にやること
-- [ ] Ghidra 導入（GitHub 公式リリース zip）、headless 解析スクリプト整備
-- [ ] **Phase 2**: `D:\Games\STCC` にインストール（`Setup.exe`、DirectX は入れない。失敗時は手動コピー＋レジストリ）→ v1.02 適用 → dgVoodoo2 → 起動確認
-- [ ] インストール後フォルダを棚卸しし `-Compare disc,installed` で差分
+- [ ] ラッパー方針の決定（ラッパーなしで基準確認 / DDrawCompat / dgVoodoo2 をユーザーが許可）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
 - [ ] **Phase 3**: `dinput.dll` プロキシの骨格（CMake、MinHook、ini、ログ、版判定、DDraw/D3D/DInput/MCI 呼び出しログ）
 - [ ] `tools/run.ps1`（ビルド → 配置 → 起動 → ログ回収）

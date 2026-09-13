@@ -1,0 +1,203 @@
+# STCC.EXE 日本版 1.02 のアドレス表（sha256 は versions.toml 参照）
+# ImageBase 0x00400000、.reloc なし → すべて絶対アドレスで固定。
+# confidence: "confirmed"（逆コンパイル/実機で確認）/ "likely"（状況証拠）/ "guess"
+# DLL 用ヘッダ生成と Ghidra ラベル入出力の元データ。名前は C 識別子として使える形にする。
+
+[meta]
+version = "jp-1.02"
+image_base = 0x00400000
+
+# ---------------------------------------------------------------- import thunks
+[[function]]
+name = "thunk_DirectDrawCreate"
+addr = 0x00476E30
+confidence = "confirmed"
+
+[[function]]
+name = "thunk_DirectDrawEnumerateA"
+addr = 0x00476E36
+confidence = "confirmed"
+
+[[function]]
+name = "thunk_DirectSoundCreate"
+addr = 0x00476E3C
+confidence = "confirmed"
+
+[[function]]
+name = "thunk_DirectInputCreateA"
+addr = 0x00476E4E
+confidence = "confirmed"
+
+# ---------------------------------------------------------------- graphics
+[[function]]
+name = "Gfx_InitDirectDraw"
+addr = 0x00435390
+confidence = "confirmed"
+note = "DirectDrawCreate → QI(IDirectDraw2) → SetCooperativeLevel → (全画面時) SetDisplayMode → ウィンドウ整形"
+
+[[function]]
+name = "Gfx_EnumDrivers"
+addr = 0x004372B0
+confidence = "likely"
+note = "DirectDrawEnumerateA 呼び出し。Graphics メニューの DirectDraw/Direct3D 選択と関連"
+
+[[function]]
+name = "Gfx_Shutdown"
+addr = 0x00435870
+confidence = "likely"
+note = "初期化失敗時に必ず呼ばれる後始末"
+
+[[global]]
+name = "g_pDirectDraw2"
+addr = 0x00567C38
+type = "IDirectDraw2*"
+confidence = "confirmed"
+
+[[global]]
+name = "g_hWndMain"
+addr = 0x0056C184
+type = "HWND"
+confidence = "confirmed"
+
+[[global]]
+name = "g_bFullscreen"
+addr = 0x00568930
+type = "int"
+confidence = "confirmed"
+note = "0=ウィンドウ (DDSCL_NORMAL)、非0=全画面 (DDSCL 0x53)"
+
+[[global]]
+name = "g_ScreenWidth"
+addr = 0x00567A10
+type = "int"
+confidence = "confirmed"
+
+[[global]]
+name = "g_ScreenHeight"
+addr = 0x00567A14
+type = "int"
+confidence = "confirmed"
+
+[[global]]
+name = "g_ScreenBpp"
+addr = 0x00567A18
+type = "int"
+confidence = "confirmed"
+note = "FUN_00435e50 がバイト数で返し、直後に *8 してビット数にする"
+
+[[function]]
+name = "Gfx_GetModeSize"
+addr = 0x00435E50
+confidence = "confirmed"
+note = "(w, h, bytesPerPixel) を返す。条件により 640x480 固定、それ以外は g_ModeTable[g_ModeIndex]"
+
+[[function]]
+name = "Gfx_CreatePrimarySurface"
+addr = 0x00436430
+confidence = "confirmed"
+note = "ウィンドウ: DDSCAPS_PRIMARYSURFACE / 全画面: +COMPLEX|FLIP, BackBufferCount=1。D3D 時 |= 3DDEVICE|VIDEOMEMORY。結果 g_pPrimarySurface"
+
+[[function]]
+name = "Gfx_CreateClipper"
+addr = 0x00436FD0
+confidence = "confirmed"
+note = "CreateClipper → SetHWnd → primary->SetClipper"
+
+[[function]]
+name = "Gfx_IsDirect3DMode"
+addr = 0x0043C610
+confidence = "likely"
+note = "1 を返すと Direct3D モード（CAPS に 3DDEVICE を足す、16bpp 強制等）"
+
+[[global]]
+name = "g_pPrimarySurface"
+addr = 0x00567C40
+type = "IDirectDrawSurface*"
+confidence = "confirmed"
+
+[[global]]
+name = "g_pClipper"
+addr = 0x00567C48
+type = "IDirectDrawClipper*"
+confidence = "confirmed"
+
+[[global]]
+name = "g_ModeIndex"
+addr = 0x0056C1A0
+type = "int"
+confidence = "confirmed"
+
+[[global]]
+name = "g_ModeTable"
+addr = 0x004BD530
+type = "struct { int w, h, bpp; }[4]"
+confidence = "confirmed"
+note = "[0]640x480@16 [1]320x240@16 [2]640x480@8 [3]320x240@8。直後は別データ（拡張は DLL 側で表を差し替える）"
+
+[[global]]
+name = "IID_IDirectDraw2"
+addr = 0x004AF858
+type = "GUID"
+confidence = "confirmed"
+
+# ---------------------------------------------------------------- input
+[[function]]
+name = "Input_InitDirectInput"
+addr = 0x00468040
+confidence = "confirmed"
+note = "DirectInputCreateA(hInst, 0x500, &g_pDirectInput) → EnumDevices(DIDEVTYPE_JOYSTICK, Input_EnumJoystickCb, DIEDFL_ATTACHEDONLY)"
+
+[[function]]
+name = "Input_EnumJoystickCb"
+addr = 0x004685A0
+confidence = "confirmed"
+
+[[global]]
+name = "g_pDirectInput"
+addr = 0x00896360
+type = "IDirectInputA*"
+confidence = "confirmed"
+
+[[global]]
+name = "g_JoystickCount"
+addr = 0x00896350
+type = "int"
+confidence = "likely"
+
+[[global]]
+name = "g_JoystickTable"
+addr = 0x00896374
+type = "struct[2] (0x44 bytes each)"
+confidence = "likely"
+note = "初期化ループは 0x896378 から 0x44 刻みで 0x896400 まで → 2 台分"
+
+# ---------------------------------------------------------------- CD audio (MCI)
+[[function]]
+name = "Cd_Open"
+addr = 0x004529C0
+confidence = "confirmed"
+note = "MCI_OPEN 'cdaudio' (MCI_OPEN_TYPE|MCI_OPEN_SHAREABLE) → MCI_STATUS → MCI_SET TMSF"
+
+[[function]]
+name = "Cd_BuildTrackTable"
+addr = 0x00452AD0
+confidence = "confirmed"
+note = "トラック数と各トラック位置を取得し GlobalAlloc したテーブルに格納"
+
+[[function]]
+name = "Cd_Play"
+addr = 0x00452D20
+confidence = "guess"
+note = "mciSendCommandA と timeGetTime を併用"
+
+[[global]]
+name = "str_cdaudio"
+addr = 0x004BDD2C
+type = "char[]"
+confidence = "confirmed"
+
+# ---------------------------------------------------------------- sound
+[[function]]
+name = "Snd_InitDirectSound"
+addr = 0x00453200
+confidence = "confirmed"

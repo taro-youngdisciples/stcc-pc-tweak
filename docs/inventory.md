@@ -52,7 +52,18 @@ CD トラック: 全 19 トラック。Track 1 = データ、**Track 2〜19 = CD
 2. **float の 4/3・3/4、640/480 定数がどこにも無い。** Saturn 由来で固定小数点演算の可能性が高い（16.16 の 0.75 = `0x0000C000` は .rdata に 25 箇所あるがノイズも多い）。ワイド化ではアスペクト値を「実行時に計算されている固定小数点」として追う必要がある。
 3. D3D は DX5 の `IDirect3D2` 系。dgVoodoo2 の DirectDraw/D3D5 対応範囲内。
 
-## 3. Ghidra headless による呼び出し元（v1.02）
+## 3. Win11 へのインストール結果（2026-09-13）
+
+`F:\Setup.exe` を Win11 で直接実行し、`D:\Games\STCC` へインストールできた（VM 不要を確認）。
+
+- **ファイル**: ディスクの `Stcc\*` と `HELP\Japanese\*` をインストール先直下にそのままコピーしただけ。`tools/stcc-inventory.ps1 -Compare disc_payload,installed_v100` で差分ゼロ（生成物なし、内容改変なし）
+- **設定ファイル**: **`C:\WINDOWS\stcc.ini`**（`[Directory] DataPath / ExePath / InstallPath / SourcePath`、`[InstallType]`、`[UnInstall]`）。ゲームも `GetWindowsDirectoryA` + `GetPrivateProfileStringA` で読む
+  - インストーラは昇格して実行されたので実体に書かれた。**ゲームを非昇格で実行して ini に書き込むと UAC により `%LOCALAPPDATA%\VirtualStore\Windows\stcc.ini` に分岐する**恐れ → DLL で ini パスをインストール先へリダイレクトする候補
+- **レジストリ**（WOW6432Node）: `SEGA\SEGA Touring Car Championship\1.0`（空）、`Uninstall\SEGA Touring Car Championship`、`App Paths\stcc.exe`
+- **スタートメニュー**: ユーザー側とAll Users側の両方にショートカット
+- **v1.02 適用**: `PatchInstaller.exe` は使わず、`STCC.EXE` と `update.doc` を手動で上書き（適用前に v1.00 のハッシュを確認し、`D:\Games\STCC_work\orig100\` にバックアップ済み）
+
+## 4. Ghidra headless による呼び出し元（v1.02）
 
 `tools/ghidra/FindImportCallers.java` の結果。import はすべて `0x476E30` 付近のサンク（`jmp [IAT]`）経由で呼ばれる。
 
@@ -65,6 +76,6 @@ CD トラック: 全 19 トラック。Track 1 = データ、**Track 2〜19 = CD
 | `mciSendCommandA` | （直接） | `0x4529C0`〜`0x452F70` に集中 → CD-DA 制御モジュール |
 | `timeGetTime` | （直接） | 約90箇所。`0x470D10`〜`0x4730C0` に密集（計測/タイミング系と推定）、ほか `0x415670`, `0x422540`, `0x437xxx` |
 
-## 4. 未解決
+## 5. 未解決
 - `.MRG` / `.BIN` のフォーマット
 - インストール後フォルダとの差分（Phase 2 で `-Compare disc,installed`）

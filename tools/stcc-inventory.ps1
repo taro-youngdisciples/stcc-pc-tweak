@@ -28,6 +28,8 @@ $OutDir = (Resolve-Path $OutDir).Path
 # 比較モード
 # ------------------------------------------------------------------
 if ($Compare) {
+    # powershell -File 経由だと "a,b" が1つの文字列で渡るので分割する
+    $Compare = @($Compare | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
     if ($Compare.Count -ne 2) { throw '-Compare には2つの Name を指定してください (例: -Compare disc,installed)' }
     $left  = Import-Csv (Join-Path $OutDir "$($Compare[0]).csv")
     $right = Import-Csv (Join-Path $OutDir "$($Compare[1]).csv")
