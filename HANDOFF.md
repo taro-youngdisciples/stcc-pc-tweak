@@ -258,6 +258,9 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - HUD（Qualifying、タイム、速度計）は画面端に出たまま横に伸びている → TL 頂点（DrawPrimitive）ではない
   - ログ: Blt は毎フレーム 1 回だけ（転送先 = 窓クライアント全体 = 表示用の転送）、BltFast 0 回 → HUD は Blt でもない
   - 残る候補は描画先サーフェスを Lock してピクセルを直接書くソフトウェアスプライト描画（Saturn VDP1 相当）。Lock 呼び出し元の集計で特定する
+  - **Lock 集計: レース中、640x480 描画先は毎フレーム 1 回、戻りアドレス `0x436808` からだけロックされる**（`0x440B97` は 8x8〜64x64 のテクスチャ転送）→ HUD はこのロック中に書き込まれていると推定
+  - ロック補助 `Gfx_LockRenderSurface 0x4367C0` / `Gfx_UnlockRenderSurface 0x436890` の 7 組すべてで、間に `Spr_RenderQueue 0x46D020(desc)` を呼ぶ。スプライト登録は `Spr_Enqueue 0x421D10({x,y,w,h,0,0,pattern,frame,flags})`（640x480 座標）
+  - → HUD 補正はスプライトのキュー（x, w）を横に k 倍する方針で検討中（端寄せ or 中央寄せ）
 - 軽微（ユーザー判断で当面許容）: コース沿いの観客席などが画面端で出現するのが少し気になる（4:3 前提のカリング/LOD）、路面の継ぎ目がわずかに見える
 
 ### 次にやること

@@ -31,6 +31,35 @@ void GLog(const char* fmt, Args... args) {
 }
 #define Log(...) GLog(__VA_ARGS__)
 
+// ---------------------------------------------------------------- ワイド化（横長の描画面）
+// Direct3D の描画先（640x480 / 320x240）を表示比率の幅に広げて作り、
+//  - ゲームの 2D 書き込み（Lock）は中央 4:3 の位置へずらして渡す → HUD は伸びない
+//  - 3D の TL 頂点は x を offset だけ右へずらす（縮めない）→ 横に視野が広がる
+//  - 表示用の Blt は広げた幅ごと転送する
+struct WideTarget {
+    IDirectDrawSurface* surf = nullptr;
+    LONG baseW = 0;  // ゲームが要求した幅（640 / 320）
+    LONG baseH = 0;
+    LONG wideW = 0;   // 実際に作った幅
+    LONG offset = 0;  // 左右の余白（ゲーム座標 x=0 が描画面のどこに来るか）
+};
+WideTarget g_wide;
+LONG g_drawsSinceLock = 0;  // 前回の描画先ロック以降の DrawPrimitive 回数（0 なら 2D だけのフレーム）
+
+LONG WideOffsetFor(LONG baseW, LONG baseH) {
+    const Config& cfg = GetConfig();
+    if (WidescreenScale(cfg) == 1.0) {
+        return 0;
+    }
+    const double wantW = static_cast<double>(baseH) * cfg.aspectW / cfg.aspectH;
+    const LONG off = static_cast<LONG>(std::lround((wantW - baseW) / 2.0));
+    return off > 0 ? off : 0;
+}
+
+bool IsWideSurface(IUnknown* s) {
+    return s && g_wide.surf && static_cast<void*>(s) == static_cast<void*>(g_wide.surf);
+}
+
 // ---------------------------------------------------------------- 表示用ヘルパ
 std::string GuidStr(const GUID* g) {
     if (!g) {
@@ -96,6 +125,7 @@ void HookDevice2(IDirect3DDevice2* dev);
 void HookSurface(IDirectDrawSurface* s);
 HRESULT STDMETHODCALLTYPE Vp2_SetViewport(IDirect3DViewport2* self, LPD3DVIEWPORT vp);
 HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPORT2 vp);
+HRESULT STDMETHODCALLTYPE Vp2_Clear(IDirect3DViewport2* self, DWORD count, LPD3DRECT rects, DWORD flags);
 
 void HookByIid(REFIID riid, void* obj) {
     if (!obj) {
@@ -133,7 +163,31 @@ HRESULT STDMETHODCALLTYPE DD2_CreateClipper(IDirectDraw2* self, DWORD flags, LPD
 HRESULT STDMETHODCALLTYPE DD2_CreateSurface(IDirectDraw2* self, LPDDSURFACEDESC desc, LPDIRECTDRAWSURFACE* out,
                                             IUnknown* outer) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDraw2*, LPDDSURFACEDESC, LPDIRECTDRAWSURFACE*, IUnknown*)>(self, 6);
-    HRESULT hr = fn(self, desc, out, outer);
+
+    // ワイド化: Direct3D の描画先（主画面以外で 3DDEVICE 付き、640x480 / 320x240）だけを横に広げて作る
+    DDSURFACEDESC wideDesc;
+    LPDDSURFACEDESC pass = desc;
+    LONG offset = 0;
+    if (desc && (desc->dwFlags & DDSD_WIDTH) && (desc->dwFlags & DDSD_HEIGHT) &&
+        (desc->ddsCaps.dwCaps & DDSCAPS_3DDEVICE) && !(desc->ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE) &&
+        ((desc->dwWidth == 640 && desc->dwHeight == 480) || (desc->dwWidth == 320 && desc->dwHeight == 240))) {
+        offset = WideOffsetFor(static_cast<LONG>(desc->dwWidth), static_cast<LONG>(desc->dwHeight));
+        if (offset > 0) {
+            wideDesc = *desc;
+            wideDesc.dwWidth = desc->dwWidth + 2 * static_cast<DWORD>(offset);
+            pass = &wideDesc;
+        }
+    }
+    HRESULT hr = fn(self, pass, out, outer);
+    if (pass != desc && SUCCEEDED(hr) && out && *out) {
+        g_wide.surf = *out;
+        g_wide.baseW = static_cast<LONG>(desc->dwWidth);
+        g_wide.baseH = static_cast<LONG>(desc->dwHeight);
+        g_wide.wideW = static_cast<LONG>(wideDesc.dwWidth);
+        g_wide.offset = offset;
+        (Log)("widescreen: render surface %ldx%ld -> %ldx%ld (offset %ld) surf=%p", g_wide.baseW, g_wide.baseH,
+              g_wide.wideW, g_wide.baseH, offset, static_cast<void*>(*out));
+    }
     Log("IDirectDraw2::CreateSurface -> 0x%08lX surf=%p", static_cast<unsigned long>(hr),
         out ? static_cast<void*>(*out) : nullptr);
     LogDesc("request", desc);
@@ -230,6 +284,7 @@ HRESULT STDMETHODCALLTYPE D3D2_CreateViewport(IDirect3D2* self, LPDIRECT3DVIEWPO
     }
     if (SUCCEEDED(hr) && out && *out) {
         PatchVtable(*out, 5, Vp2_SetViewport, "IDirect3DViewport2::SetViewport");
+        PatchVtable(*out, 12, Vp2_Clear, "IDirect3DViewport2::Clear");
         PatchVtable(*out, 17, Vp2_SetViewport2, "IDirect3DViewport2::SetViewport2");
     }
     return hr;
@@ -336,25 +391,22 @@ void FlushDrawStatsLocked() {
     g_draw.windowStart = now;
 }
 
-// ---------------------------------------------------------------- ワイド化（アナモルフィック）
+// ---------------------------------------------------------------- ワイド化: 3D の TL 頂点
 // ゲームは自前で 640x480 に投影した TL 頂点だけで描く（SetTransform 0 回、DrawPrimitive + D3DVT_TLVERTEX）。
-// その x を画面中心から k 倍に縮めたコピーを渡し、窓側（16:9 等）で横に引き伸ばすと、縦の視野はそのままで横が広がる。
+// 横長の描画面に対して x を offset だけ右へずらせば、中央 4:3 は元どおりで、左右にはみ出していた部分が見えるようになる。
 // ゲームのカリングは 4:3 前提なので、画面端で物体が湧く問題はゲーム側の修正で別途対処する。
-float g_viewportCenterX = 320.0f;  // SetViewport2 で更新
-float g_viewportWidth = 640.0f;
 thread_local std::vector<D3DTLVERTEX> t_wideVerts;
 
-// 画面幅いっぱいの背景ポリゴン（空など）か: 全頂点の x が左端か右端にぴったり乗っている
+// 画面幅いっぱいの背景ポリゴン（空など）か: 全頂点の x がゲーム座標の左端(0)か右端(baseW)にぴったり乗っている
 bool IsFullWidthQuad(const D3DTLVERTEX* v, DWORD count) {
     if (count < 3 || count > 8) {
         return false;
     }
-    const float left = g_viewportCenterX - g_viewportWidth * 0.5f;
-    const float right = g_viewportCenterX + g_viewportWidth * 0.5f;
+    const float right = static_cast<float>(g_wide.baseW);
     bool hasLeft = false;
     bool hasRight = false;
     for (DWORD i = 0; i < count; ++i) {
-        if (std::fabs(v[i].sx - left) <= 1.01f) {
+        if (std::fabs(v[i].sx) <= 1.01f) {
             hasLeft = true;
         } else if (std::fabs(v[i].sx - right) <= 1.01f) {
             hasRight = true;
@@ -366,37 +418,39 @@ bool IsFullWidthQuad(const D3DTLVERTEX* v, DWORD count) {
 }
 
 LPVOID WidenVertices(D3DVERTEXTYPE vtype, LPVOID verts, DWORD count) {
-    static const float k = static_cast<float>(WidescreenScale(GetConfig()));
-    if (k == 1.0f || vtype != D3DVT_TLVERTEX || !verts || count == 0) {
+    ++g_drawsSinceLock;
+    if (g_wide.offset == 0 || vtype != D3DVT_TLVERTEX || !verts || count == 0) {
         return verts;
     }
     const auto* src = static_cast<const D3DTLVERTEX*>(verts);
     t_wideVerts.assign(src, src + count);
+    const float off = static_cast<float>(g_wide.offset);
 
     if (IsFullWidthQuad(src, count)) {
-        // 背景は縮めない（窓の引き伸ばしで画面幅いっぱいに戻る）。
-        // extend ならテクスチャの横範囲を 1/k 倍に広げ、引き伸ばされない本来の比率で見せる
-        if (GetConfig().wideBackgroundExtend) {
-            float minU = t_wideVerts[0].tu;
-            float maxU = t_wideVerts[0].tu;
-            for (const auto& v : t_wideVerts) {
-                minU = v.tu < minU ? v.tu : minU;
-                maxU = v.tu > maxU ? v.tu : maxU;
-            }
-            const float cu = (minU + maxU) * 0.5f;
-            for (auto& v : t_wideVerts) {
-                v.tu = cu + (v.tu - cu) / k;
+        // 背景は描画面の端から端まで広げる。extend ならテクスチャの横範囲も同じ比率で広げ、絵を伸ばさない
+        const float right = static_cast<float>(g_wide.wideW);
+        const float ratio = static_cast<float>(g_wide.wideW) / static_cast<float>(g_wide.baseW);
+        float minU = t_wideVerts[0].tu;
+        float maxU = t_wideVerts[0].tu;
+        for (const auto& v : t_wideVerts) {
+            minU = v.tu < minU ? v.tu : minU;
+            maxU = v.tu > maxU ? v.tu : maxU;
+        }
+        const float cu = (minU + maxU) * 0.5f;
+        for (auto& v : t_wideVerts) {
+            v.sx = std::fabs(v.sx) <= 1.01f ? 0.0f : right;
+            if (GetConfig().wideBackgroundExtend) {
+                v.tu = cu + (v.tu - cu) * ratio;
             }
         }
         if (GetConfig().logGraphics) {
-            ++g_draw.bgQuads;  // 呼び出し元（DrawPrimitive フック）でロック済みではないが、統計用なので厳密さは不要
+            ++g_draw.bgQuads;  // 統計用なので厳密な排他は不要
         }
         return t_wideVerts.data();
     }
 
-    const float cx = g_viewportCenterX;
     for (auto& v : t_wideVerts) {
-        v.sx = cx + (v.sx - cx) * k;
+        v.sx += off;
     }
     return t_wideVerts.data();
 }
@@ -466,12 +520,16 @@ HRESULT STDMETHODCALLTYPE Dev2_DrawIndexedPrimitive(IDirect3DDevice2* self, D3DP
 // ---------------------------------------------------------------- IDirect3DViewport2（値が変わったときだけ記録）
 HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPORT2 vp) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT2)>(self, 17);
-    HRESULT hr = fn(self, vp);
-    if (vp && SUCCEEDED(hr) && vp->dwWidth >= 160) {
-        // 640 と 639 の 2 種類が交互に来るので、幅は大きい方に丸める
-        g_viewportWidth = static_cast<float>((vp->dwWidth + 1) & ~1UL);
-        g_viewportCenterX = static_cast<float>(vp->dwX) + g_viewportWidth * 0.5f;
+    // ワイド化: 640/639 幅の viewport を描画面の幅まで広げる（TL 頂点のクリップ範囲になる）
+    D3DVIEWPORT2 wide;
+    LPD3DVIEWPORT2 pass = vp;
+    if (vp && g_wide.offset > 0 && vp->dwX == 0 && vp->dwWidth + 1 >= static_cast<DWORD>(g_wide.baseW) &&
+        vp->dwWidth <= static_cast<DWORD>(g_wide.baseW)) {
+        wide = *vp;
+        wide.dwWidth += 2 * static_cast<DWORD>(g_wide.offset);
+        pass = &wide;
     }
+    HRESULT hr = fn(self, pass);
     static D3DVIEWPORT2 last{};
     if (vp && std::memcmp(vp, &last, sizeof(last)) != 0) {
         last = *vp;
@@ -484,7 +542,15 @@ HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPO
 
 HRESULT STDMETHODCALLTYPE Vp2_SetViewport(IDirect3DViewport2* self, LPD3DVIEWPORT vp) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT)>(self, 5);
-    HRESULT hr = fn(self, vp);
+    D3DVIEWPORT wide;
+    LPD3DVIEWPORT pass = vp;
+    if (vp && g_wide.offset > 0 && vp->dwX == 0 && vp->dwWidth + 1 >= static_cast<DWORD>(g_wide.baseW) &&
+        vp->dwWidth <= static_cast<DWORD>(g_wide.baseW)) {
+        wide = *vp;
+        wide.dwWidth += 2 * static_cast<DWORD>(g_wide.offset);
+        pass = &wide;
+    }
+    HRESULT hr = fn(self, pass);
     static D3DVIEWPORT last{};
     if (vp && std::memcmp(vp, &last, sizeof(last)) != 0) {
         last = *vp;
@@ -493,6 +559,26 @@ HRESULT STDMETHODCALLTYPE Vp2_SetViewport(IDirect3DViewport2* self, LPD3DVIEWPOR
             vp->dvMinZ, vp->dvMaxZ, static_cast<unsigned long>(hr));
     }
     return hr;
+}
+
+// IDirect3DViewport2::Clear (index 12): ゲーム座標で全幅の矩形は描画面の全幅に広げる
+HRESULT STDMETHODCALLTYPE Vp2_Clear(IDirect3DViewport2* self, DWORD count, LPD3DRECT rects, DWORD flags) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, DWORD, LPD3DRECT, DWORD)>(self, 12);
+    if (g_wide.offset == 0 || !rects || count == 0 || count > 16) {
+        return fn(self, count, rects, flags);
+    }
+    D3DRECT wide[16];
+    for (DWORD i = 0; i < count; ++i) {
+        wide[i] = rects[i];
+        if (wide[i].x1 <= 0 && wide[i].x2 >= g_wide.baseW - 1) {
+            wide[i].x1 = 0;
+            wide[i].x2 = g_wide.wideW;
+        } else {
+            wide[i].x1 += g_wide.offset;
+            wide[i].x2 += g_wide.offset;
+        }
+    }
+    return fn(self, count, wide, flags);
 }
 
 // ---------------------------------------------------------------- IDirect3DDevice2
@@ -560,6 +646,27 @@ __declspec(noinline) HRESULT STDMETHODCALLTYPE Surf_Lock(IDirectDrawSurface* sel
                                                          DWORD flags, HANDLE ev) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, LPRECT, LPDDSURFACEDESC, DWORD, HANDLE)>(self, 25);
     HRESULT hr = fn(self, rect, desc, flags, ev);
+
+    // ワイド化: 描画先のロックは、ゲームから見て中央 4:3 部分だけの 640x480（320x240）に見せる
+    if (SUCCEEDED(hr) && desc && !rect && IsWideSurface(self) && desc->lpSurface &&
+        desc->dwWidth == static_cast<DWORD>(g_wide.wideW)) {
+        const LONG bpp = static_cast<LONG>(desc->ddpfPixelFormat.dwRGBBitCount / 8);
+        const LONG pitch = desc->lPitch;
+        auto* base = static_cast<BYTE*>(desc->lpSurface);
+        // 前回ロック以降 3D を描いていない = 2D だけの画面（メニュー等）。左右の余白に前の画面が残らないよう黒で塗る
+        if (InterlockedExchange(&g_drawsSinceLock, 0) == 0 && bpp > 0) {
+            const size_t leftBytes = static_cast<size_t>(g_wide.offset * bpp);
+            const size_t rightStart = static_cast<size_t>((g_wide.offset + g_wide.baseW) * bpp);
+            const size_t rightBytes = static_cast<size_t>((g_wide.wideW - g_wide.offset - g_wide.baseW) * bpp);
+            for (DWORD y = 0; y < desc->dwHeight; ++y) {
+                BYTE* row = base + static_cast<ptrdiff_t>(y) * pitch;
+                std::memset(row, 0, leftBytes);
+                std::memset(row + rightStart, 0, rightBytes);
+            }
+        }
+        desc->lpSurface = base + g_wide.offset * bpp;
+        desc->dwWidth = static_cast<DWORD>(g_wide.baseW);
+    }
     if (GetConfig().logGraphics && SUCCEEDED(hr) && desc) {
         void* caller = _ReturnAddress();
         AcquireSRWLockExclusive(&g_drawLock);
@@ -584,6 +691,29 @@ HRESULT STDMETHODCALLTYPE Surf_Blt(IDirectDrawSurface* self, LPRECT dest, LPDIRE
     if (dest) {
         AccumulateBlt(false, dest->left, dest->right - dest->left);
     }
+    if (g_wide.offset > 0) {
+        RECT d;
+        RECT s;
+        if (IsWideSurface(src) && !IsWideSurface(self) && srcRect && srcRect->left <= 0 &&
+            srcRect->right >= g_wide.baseW - 1 && srcRect->right <= g_wide.baseW) {
+            // 表示用の転送: 広げた描画面の全幅を送る
+            s = *srcRect;
+            s.left = 0;
+            s.right = g_wide.wideW;
+            return fn(self, dest, src, &s, flags, fx);
+        }
+        if (IsWideSurface(self) && dest) {
+            d = *dest;
+            if ((flags & DDBLT_COLORFILL) && d.left <= 0 && d.right >= g_wide.baseW - 1) {
+                d.left = 0;
+                d.right = g_wide.wideW;  // 全画面の塗りつぶしは余白ごと
+            } else {
+                d.left += g_wide.offset;
+                d.right += g_wide.offset;
+            }
+            return fn(self, &d, src, srcRect, flags, fx);
+        }
+    }
     return fn(self, dest, src, srcRect, flags, fx);
 }
 
@@ -591,6 +721,9 @@ HRESULT STDMETHODCALLTYPE Surf_BltFast(IDirectDrawSurface* self, DWORD x, DWORD 
                                        DWORD trans) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, DWORD, DWORD, LPDIRECTDRAWSURFACE, LPRECT, DWORD)>(self, 7);
     AccumulateBlt(true, static_cast<long>(x), srcRect ? srcRect->right - srcRect->left : -1);
+    if (g_wide.offset > 0 && IsWideSurface(self)) {
+        x += static_cast<DWORD>(g_wide.offset);
+    }
     return fn(self, x, y, src, srcRect, trans);
 }
 

@@ -129,6 +129,51 @@ confidence = "likely"
 note = "画面モード切替時にウィンドウを新モードのクライアントサイズへ SetWindowPos（呼び出し 0x436750 = サイズ変更 flags 0x16、0x436765 = Z 順 flags 0x13）。メニューは 640x480、レースは g_ModeIndex（Settings > Screen Mode、例 320x240）。関数先頭は未確認（0x4366A7 で g_bFullscreen を参照）"
 
 [[function]]
+name = "Gfx_LockRenderSurface"
+addr = 0x004367C0
+confidence = "confirmed"
+note = "(DDSURFACEDESC*) → Gfx_LockSurface(g_pRenderSurface, desc)。レース中は毎フレーム 1 回（HUD 等のソフトウェア 2D 描画用と推定）"
+
+[[function]]
+name = "Gfx_LockSurface"
+addr = 0x004367E0
+confidence = "confirmed"
+note = "(surface, desc) → Lock(NULL, desc, DDLOCK_WAIT, NULL)。DDERR_SURFACELOST(0x887601C2) なら復元して再試行。g_bLockDisabled(0x56C198) なら E_FAIL"
+
+[[function]]
+name = "Race_RenderFrame2D"
+addr = 0x004170B0
+confidence = "likely"
+note = "レース中の毎フレーム描画列: 0x40C1E0 → 0x4420C0 → 0x443DA0 → 0x40BD50 → 0x435C20 → Spr_RenderQueue(desc) → 0x436AC0 → 0x46D110 → 0x435CE0。直前の 0x417080 で Gfx_LockRenderSurface"
+
+[[function]]
+name = "Spr_RenderQueue"
+addr = 0x0046D020
+confidence = "likely"
+note = "(DDSURFACEDESC* locked) キュー済み 2D スプライトをロック中の描画先へ書き込む。全ての Lock/Unlock ペアの間で呼ばれる。HUD の横伸び補正の候補地点"
+
+[[function]]
+name = "Spr_Enqueue"
+addr = 0x00421D10
+confidence = "likely"
+note = "(short cmd[9] = {x, y, w, h, 0, 0, pattern, frame, flags}) 640x480 座標でスプライトを登録（例: 全画面 {0,0,640,480}）"
+
+[[function]]
+name = "Gfx_UnlockRenderSurface"
+addr = 0x00436890
+confidence = "confirmed"
+
+[[function]]
+name = "Gfx_LockPrimary"
+addr = 0x00436870
+confidence = "confirmed"
+
+[[function]]
+name = "Gfx_UnlockPrimary"
+addr = 0x004368B0
+confidence = "confirmed"
+
+[[function]]
 name = "Gfx_CreateClipper"
 addr = 0x00436FD0
 confidence = "confirmed"
