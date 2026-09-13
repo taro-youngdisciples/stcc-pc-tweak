@@ -156,7 +156,40 @@ note = "(DDSURFACEDESC* locked) キュー済み 2D スプライトをロック�
 name = "Spr_Enqueue"
 addr = 0x00421D10
 confidence = "likely"
-note = "(short cmd[9] = {x, y, w, h, 0, 0, pattern, frame, flags}) 640x480 座標でスプライトを登録（例: 全画面 {0,0,640,480}）"
+note = "(short cmd[9] = {x, y, w, h, 0, 0, pattern, frame, flags}) → Spr_QueuePush(pattern, x, y, frame*h, h)。640x480 座標"
+
+[[function]]
+name = "Spr_QueuePush"
+addr = 0x0046CE10
+confidence = "confirmed"
+note = "(pattern, x, y, srcY, h)。画面幅 g_SprScreenW==320 なら座標を半分に。x+幅<0 や x>=画面幅なら捨てる。はみ出すなら clip=1"
+
+[[global]]
+name = "g_SprScreenW"
+addr = 0x010E4C40
+type = "int"
+confidence = "confirmed"
+note = "スプライト描画の画面幅（640 / 320）。g_SprScreenH = 0x10E4C44"
+
+[[global]]
+name = "g_SprPatterns"
+addr = 0x010E4C48
+type = "struct { int data; short w; short totalH; BYTE type; ... }[]  (12 bytes)"
+confidence = "confirmed"
+note = "+0 データ(0 なら未ロード) / +4 幅 / +6 全高 / +8 種別（Spr_RenderQueue の描画関数選択: 0,2→2 1→1 3→3 4→0、flags(+0x0E) の bit15/bit0 で +8/+4）"
+
+[[global]]
+name = "g_SprQueueCount"
+addr = 0x010EBCC8
+type = "int"
+confidence = "confirmed"
+
+[[global]]
+name = "g_SprQueue"
+addr = 0x010EBCCC
+type = "struct { WORD pattern; short x; short y; short srcY; short h; short _a; short _b; WORD flags; }[]  (16 bytes)"
+confidence = "confirmed"
+note = "flags(+0x0E): Spr_QueuePush が clip 要否 (0/1) を書く。描画関数表 0x4C0D38（通常）/ 0x4C0D68（インターレース時?）"
 
 [[function]]
 name = "Gfx_UnlockRenderSurface"

@@ -19,8 +19,15 @@ public class DecompileFunctions extends GhidraScript {
                 Address addr = toAddr(arg);
                 Function f = getFunctionContaining(addr);
                 if (f == null) {
-                    println("### " + arg + ": 関数が見つからない");
-                    continue;
+                    // 関数ポインタ表からしか呼ばれない関数は自動解析で拾われないことがある。
+                    // -readOnly 実行でもメモリ上では作成できる（保存はされない）ので、その場で関数化する
+                    disassemble(addr);
+                    f = createFunction(addr, null);
+                    if (f == null) {
+                        println("### " + arg + ": 関数が見つからない（作成にも失敗）");
+                        continue;
+                    }
+                    println("### " + arg + ": 関数を一時作成");
                 }
                 DecompileResults res = ifc.decompileFunction(f, 60, monitor);
                 println("### " + f.getName() + " @ " + f.getEntryPoint());
