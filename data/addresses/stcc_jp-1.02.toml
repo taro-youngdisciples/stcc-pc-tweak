@@ -134,6 +134,78 @@ type = "struct { int w, h, bpp; }[4]"
 confidence = "confirmed"
 note = "[0]640x480@16 [1]320x240@16 [2]640x480@8 [3]320x240@8。直後は別データ（拡張は DLL 側で表を差し替える）"
 
+[[function]]
+name = "App_InitInstance_FullscreenInit"
+addr = 0x0043964D
+confidence = "confirmed"
+note = "InitInstance 内。g_bFullscreen を無条件に 1 にする唯一の書き込み（ウィンドウ起動オプションは無い）。直後に App_ParseCommandLine"
+
+[[function]]
+name = "App_ParseCommandLine"
+addr = 0x00439CB0
+confidence = "confirmed"
+note = "/D → 0x568938=1、/N<8文字> → 0x568A08 に名前。画面モード系オプションは無い"
+
+[[function]]
+name = "Settings_Load"
+addr = 0x00439D20
+confidence = "confirmed"
+note = "STCC.DAT (CFile, 先頭 WORD 0x100) から 0x568A48[0x3734], 0x56C210[0xB24], 0x56C1A0[0x68] を読む。無ければ既定値 0x4ABEC8 からコピー"
+
+[[function]]
+name = "Settings_Save"
+addr = 0x00439F80
+confidence = "confirmed"
+note = "STCC.DAT に同ブロックを書く"
+
+[[function]]
+name = "UI_SetMenuMode"
+addr = 0x004382E0
+confidence = "confirmed"
+note = "arg=1: ゲーム停止しカーソル＋メニューバー表示 / arg=0: 復帰。状態は g_MenuMode。Esc(cmd 32773) は g_MenuMode 中なら 0 で呼ぶ"
+
+[[function]]
+name = "UI_ShowMenuInFullscreen"
+addr = 0x0043B8E0
+confidence = "confirmed"
+note = "全画面時 ShowCursor → FlipToGDISurface → DrawMenuBar/RedrawWindow。ダイアログ/MessageBox の前後で (1)/(0) と呼ばれる → dgVoodoo では SystemHookFlags=gdi が必要"
+
+[[function]]
+name = "Gfx_FlipToGDISurface"
+addr = 0x00435E30
+confidence = "confirmed"
+
+[[function]]
+name = "UI_LoadMenu"
+addr = 0x0043C4D0
+confidence = "confirmed"
+note = "LoadMenuA(id)→SetMenu。0x80=D3D無し, 0x81=DirectDraw中(Display メニュー付き), 0x82=Direct3D中(16bit モードのみ)"
+
+[[function]]
+name = "Cmd_SelectDirect3D"
+addr = 0x00439340
+confidence = "confirmed"
+note = "cmd 32774: LoadMenu(0x82), g_UseDirect3D=1, Gfx_Shutdown→Gfx_InitDirectDraw で再初期化"
+
+[[function]]
+name = "Cmd_SelectDirectDraw"
+addr = 0x00439390
+confidence = "confirmed"
+note = "cmd 32775: LoadMenu(0x81), g_UseDirect3D=0, 再初期化"
+
+[[global]]
+name = "g_MenuMode"
+addr = 0x0056C194
+type = "int"
+confidence = "confirmed"
+
+[[global]]
+name = "g_UseDirect3D"
+addr = 0x0066D33C
+type = "int"
+confidence = "confirmed"
+note = "getter 0x43C610 / setter 0x43C600"
+
 [[global]]
 name = "IID_IDirectDraw2"
 addr = 0x004AF858
