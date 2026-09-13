@@ -39,3 +39,9 @@ target_compile_features(stccfix PRIVATE cxx_std_20)
 target_compile_definitions(stccfix PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
 target_compile_options(stccfix PRIVATE /W4 /utf-8 /permissive-)
 target_link_libraries(stccfix PRIVATE minhook dxguid)
+
+# ---------------------------------------------------------------- joylog（コントローラ診断ツール、ゲーム非依存）
+add_executable(joylog tools/joylog/joylog.cpp)
+target_compile_definitions(joylog PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+target_compile_options(joylog PRIVATE /W4 /utf-8 /permissive-)
+target_link_libraries(joylog PRIVATE dinput8 dxguid)

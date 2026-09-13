@@ -212,6 +212,10 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - 入力の選択は F5「Device Settings」（DIALOG 102/190）: Player 1/2 ごとに Keyboard / Game Pad / Joystick / SideWinder Game Pad / SideWinder 3D Pro Type / Steering Wheel（T2）/ Per4mer Racing Wheel、各「Next」で割り当てダイアログ（Game Pad=114, 設定=115/116, 調整=118/121）
   - 116 には「アクセルペダル」「ブレーキペダル」、121 には「アクセルとブレーキはスロットルかスティックを割り当てないと調整出来ません」→ 軸割り当て式
 - テスト中に SHARE か OPTIONS 押下で BT 切断が1回発生（原因未確認）
+- **F5 → Player 1「Game Pad」で動作を確認**: 左スティックでステアリング、□ = Button1（アクセル）、× = Button2（ブレーキ）。アクセル/ブレーキはデジタルのみ
+- **BT 切断が頻発**: System ログに `HidBth` イベント 2（went out of range or became unresponsive）が 90 分で 9 回、13:24〜13:26 は約 25 秒ごと。ゲーム起動前にも 1 回。BT リンク層の問題で、ゲームが原因ではない。互換（非純正）DS4 + Steam 起動中（Steam の PS4 対応による拡張モード切替が疑わしい）
+- 切断後のゲーム挙動: `GetDeviceState` → `DIERR_INPUTLOST`、以後 `Acquire` が毎フレーム `DIERR_UNPLUGGED`(0x80040209)。**ゲームは再列挙しないので、再接続しても F5 を開き直すまで入力が戻らない** → DLL で自動再接続する候補
+- 切り分け用に `tools/joylog`（DirectInput8 非排他、切断/再接続・Steam 起動有無を記録）を作成
 
 ### 次にやること
 - [ ] F5 で Joystick / Game Pad / Steering Wheel（T2）を選んだ場合の `GetDeviceState` と操作感を確認 → DLL での軸合成（L2/R2 → ペダル軸）の要否を決める

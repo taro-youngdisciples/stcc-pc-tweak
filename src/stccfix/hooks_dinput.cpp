@@ -160,9 +160,13 @@ HRESULT STDMETHODCALLTYPE Dev_Acquire(IDirectInputDevice2A* self) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice2A*)>(self, 7);
     HRESULT hr = fn(self);
     static LONG calls = 0;
+    static LONG failures = 0;
     LONG n = InterlockedIncrement(&calls);
-    if (n <= 5 || FAILED(hr)) {
-        Log("%p->Acquire #%ld -> 0x%08lX", static_cast<void*>(self), n, static_cast<unsigned long>(hr));
+    // 切断中はゲームが毎フレーム Acquire を再試行するので、失敗は最初の 3 回と以降 300 回ごとだけ記録する
+    LONG f = FAILED(hr) ? InterlockedIncrement(&failures) : 0;
+    if (n <= 5 || (f > 0 && (f <= 3 || f % 300 == 0))) {
+        Log("%p->Acquire #%ld -> 0x%08lX%s", static_cast<void*>(self), n, static_cast<unsigned long>(hr),
+            f > 0 ? (f == 3 ? "（以降の失敗は 300 回ごと）" : "") : "");
     }
     return hr;
 }
