@@ -64,6 +64,26 @@ void AnchorQueue(const WideInfo& wi) {
         return;
     }
     auto* q = reinterpret_cast<SprEntry*>(kSprQueue);
+    const int screenW = static_cast<int>(wi.wideW);
+    const int screenH = *reinterpret_cast<const int*>(kSprScreenH);
+
+    auto moveAndReclip = [&](int i, int shift) {
+        q[i].x = static_cast<short>(q[i].x + shift);
+        const bool clip = q[i].x < 0 || q[i].y < 0 || q[i].x + PatternWidth(q[i].pattern) >= screenW ||
+                          q[i].y + q[i].h >= screenH;
+        q[i].flags = static_cast<WORD>((q[i].flags & ~1u) | (clip ? 1u : 0u));
+    };
+
+    // 画面幅いっぱいのスプライト（区切り線、帯など）がある = レース前のグリッド一覧のような「レイアウト画面」。
+    // 行ごとに左右へ散らすと崩れるので、全体を中央 4:3 のまま置く（レース中の HUD は全幅の 1 枚絵を持たない）
+    for (int i = 0; i < count; ++i) {
+        if (q[i].x <= 1 && q[i].x + PatternWidth(q[i].pattern) >= wi.baseW - 1) {
+            for (int j = 0; j < count; ++j) {
+                moveAndReclip(j, static_cast<int>(wi.offset));
+            }
+            return;
+        }
+    }
 
     struct Box {
         int x0, y0, x1, y1;
@@ -107,8 +127,6 @@ void AnchorQueue(const WideInfo& wi) {
         c.y1 = std::max(c.y1, boxes[i].y1);
     }
 
-    const int screenW = static_cast<int>(wi.wideW);
-    const int screenH = *reinterpret_cast<const int*>(kSprScreenH);
     const int center = static_cast<int>(wi.baseW) / 2;
     for (int i = 0; i < count; ++i) {
         const Box& c = clusters[FindRoot(parent, i)];
@@ -118,10 +136,7 @@ void AnchorQueue(const WideInfo& wi) {
         if (cw < wi.baseW * 6 / 10 && std::abs(cc - center) > wi.baseW * 12 / 100) {
             shift = cc < center ? 0 : static_cast<int>(wi.offset) * 2;
         }
-        q[i].x = static_cast<short>(q[i].x + shift);
-        const bool clip = q[i].x < 0 || q[i].y < 0 || q[i].x + PatternWidth(q[i].pattern) >= screenW ||
-                          q[i].y + q[i].h >= screenH;
-        q[i].flags = static_cast<WORD>((q[i].flags & ~1u) | (clip ? 1u : 0u));
+        moveAndReclip(i, shift);
     }
 }
 
