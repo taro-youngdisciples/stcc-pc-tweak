@@ -21,8 +21,7 @@
 *.DAT
 *.vxd
 *.VxD
-stcc*.ini
-Stcc*.ini
+/**/[Ss][Tt][Cc][Cc].[Ii][Nn][Ii]
 
 # ゲームのインストール先・作業用コピーをリポジトリ内に置いた場合の保険
 /game/

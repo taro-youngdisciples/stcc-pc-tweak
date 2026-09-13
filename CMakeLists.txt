@@ -1,0 +1,24 @@
+cmake_minimum_required(VERSION 3.24)
+project(stccfix LANGUAGES CXX)
+
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+  message(FATAL_ERROR "STCC は 32bit プロセスです。-A Win32 で構成してください")
+endif()
+
+# CRT を静的リンクし、ゲームフォルダに DLL 1 個を置くだけで動くようにする
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+add_library(stccfix SHARED
+  src/stccfix/common.h
+  src/stccfix/log.cpp
+  src/stccfix/config.cpp
+  src/stccfix/patch.cpp
+  src/stccfix/proxy_dinput.cpp
+  src/stccfix/dllmain.cpp
+  src/stccfix/dinput.def
+)
+# ゲームは DINPUT.dll を静的 import しているので、この名前でゲームフォルダに置く
+set_target_properties(stccfix PROPERTIES OUTPUT_NAME dinput)
+target_compile_features(stccfix PRIVATE cxx_std_20)
+target_compile_definitions(stccfix PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+target_compile_options(stccfix PRIVATE /W4 /utf-8 /permissive-)
