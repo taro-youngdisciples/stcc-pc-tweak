@@ -11,6 +11,7 @@
 #define DIRECTINPUT_VERSION 0x0500
 #include <dinput.h>
 
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -56,20 +57,29 @@ const char* HowName(DWORD how) {
     }
 }
 
-// DIJOYSTATE のオフセットを軸名に
+// DIJOYSTATE のオフセットを軸名に（DIJOFS_* マクロは定数式で C4644 になるので標準の offsetof を使う）
 const char* JoyOffsetName(DWORD ofs) {
-    switch (ofs) {
-        case DIJOFS_X: return "X";
-        case DIJOFS_Y: return "Y";
-        case DIJOFS_Z: return "Z";
-        case DIJOFS_RX: return "Rx";
-        case DIJOFS_RY: return "Ry";
-        case DIJOFS_RZ: return "Rz";
-        case DIJOFS_SLIDER(0): return "Slider0";
-        case DIJOFS_SLIDER(1): return "Slider1";
-        case DIJOFS_POV(0): return "POV0";
-        default: return "";
+    struct Entry {
+        std::size_t ofs;
+        const char* name;
+    };
+    static constexpr Entry kNames[] = {
+        {offsetof(DIJOYSTATE, lX), "X"},
+        {offsetof(DIJOYSTATE, lY), "Y"},
+        {offsetof(DIJOYSTATE, lZ), "Z"},
+        {offsetof(DIJOYSTATE, lRx), "Rx"},
+        {offsetof(DIJOYSTATE, lRy), "Ry"},
+        {offsetof(DIJOYSTATE, lRz), "Rz"},
+        {offsetof(DIJOYSTATE, rglSlider), "Slider0"},
+        {offsetof(DIJOYSTATE, rglSlider) + sizeof(LONG), "Slider1"},
+        {offsetof(DIJOYSTATE, rgdwPOV), "POV0"},
+    };
+    for (const auto& e : kNames) {
+        if (e.ofs == ofs) {
+            return e.name;
+        }
     }
+    return "";
 }
 
 // ---------------------------------------------------------------- IDirectInputDevice2A
