@@ -30,7 +30,8 @@ bool GraphicsHooksNeeded(const Config& c) {
 }
 
 bool InputHooksNeeded(const Config& c) {
-    return c.logInput || c.inputDeviceSubtype != 0 || c.triggerPedals || c.steerDeadzone > 0 || c.steerLinearity != 100;
+    return c.logInput || c.inputDeviceSubtype != 0 || !c.inputDeviceName.empty() || !c.forceFeedback || c.triggerPedals ||
+           c.steerDeadzone > 0 || c.steerLinearity != 100;
 }
 
 Config LoadConfig(const std::wstring& iniPath) {
@@ -71,6 +72,19 @@ Config LoadConfig(const std::wstring& iniPath) {
         c.inputDeviceSubtype = 4;  // DIDEVTYPEJOYSTICK_GAMEPAD
     }
 
+    wchar_t name[128];
+    GetPrivateProfileStringW(L"Input", L"DeviceName", L"", name, static_cast<DWORD>(std::size(name)), ini);
+    if (wchar_t* hash = std::wcschr(name, L'#')) {
+        *hash = L'\0';
+        c.inputDeviceIndex = _wtoi(hash + 1);
+    }
+    if (name[0]) {
+        char ansi[256];
+        WideCharToMultiByte(CP_ACP, 0, name, -1, ansi, sizeof(ansi), nullptr, nullptr);
+        c.inputDeviceName = ansi;
+    }
+
+    c.forceFeedback = GetPrivateProfileIntW(L"Input", L"ForceFeedback", 1, ini) != 0;
     c.triggerPedals = GetPrivateProfileIntW(L"Input", L"TriggerPedals", 0, ini) != 0;
     wchar_t axis[16];
     GetPrivateProfileStringW(L"Input", L"AccelAxis", L"Ry", axis, static_cast<DWORD>(std::size(axis)), ini);

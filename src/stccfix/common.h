@@ -32,6 +32,14 @@ struct Config {
     // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
     // ゲームは サブタイプ 4(GAMEPAD)→Game Pad、6(WHEEL)→Steering Wheel、それ以外→Joystick として選択肢を出す
     int inputDeviceSubtype = 0;
+    // ゲームに見せるゲームコントローラを製品名で絞る（空 = すべて）。ゲームは最大 2 台しか使わず、
+    // DS4 と Fanatec（HID コレクションが 2 つ見える）が同時に繋がっていると意図しない台が Player 1 になる。
+    // "名前#N" なら名前が一致した N 台目だけ
+    std::string inputDeviceName;  // ANSI（DIDEVICEINSTANCEA の製品名と比較）
+    int inputDeviceIndex = 0;     // 0 = 一致したものすべて
+    // false = GetCapabilities から DIDC_FORCEFEEDBACK を消し、ゲームに FFB（AUTOCENTER 設定と ConstantForce）を
+    // 作らせない。ゲームは既知機種（種別コード 3/8）以外では強さを更新せず、初期値のエフェクトを開始するだけ
+    bool forceFeedback = true;
 
     // ---- 軸の加工（GetDeviceState の結果を書き換える）
     // Joystick / Steering Wheel モードのゲームは Y 軸 1 本を「上=アクセル、下=ブレーキ」として読む。
@@ -41,7 +49,7 @@ struct Config {
     int brakeAxis = 3;
     bool accelInvert = false;  // 離したときに最大値になる軸（ホイールのペダル等）なら 1
     bool brakeInvert = false;
-    int pedalDeadzone = 5;     // %。これ未満の踏み込みは 0 とみなし、両方 0 ならスティックの Y をそのまま通す
+    int pedalDeadzone = 5;     // %。これ未満の踏み込みは 0 とみなし、両方 0 ならスティックの Y をそのまま通す（ホイールや Y がペダルなら通さない）
     int steerDeadzone = 0;     // %。X 軸中央の遊び
     int steerLinearity = 100;  // %。100 = 線形、>100 で中央付近が鈍く（出力 = 入力^(値/100)）
 };

@@ -93,6 +93,7 @@ struct DeviceState {
     LONG rangeMax[kAxisCount];
     DIJOYSTATE last;
     bool hasLast;
+    bool isWheel;  // GetCapabilities の本来のサブタイプが WHEEL（ペダルは軸が別で、Y を素通しすると離したペダルの生値になる）
     DWORD lastLogTick;
     LONG polls;
 };
@@ -150,7 +151,10 @@ void RemapState(const DeviceState& s, DIJOYSTATE& js) {
         };
         const double accel = pedal(cfg.accelAxis, cfg.accelInvert);
         const double brake = pedal(cfg.brakeAxis, cfg.brakeInvert);
-        if (accel > 0 || brake > 0) {
+        // 両方離していればスティックの Y を素通しする。ただしホイールや Y 自体がペダルの設定では、Y は
+        // ペダル（Fanatec はクラッチ）なので素通しすると離したペダルの生値が渡る → 常に合成値で上書きする
+        const bool noStickY = s.isWheel || cfg.accelAxis == 1 || cfg.brakeAxis == 1;
+        if (noStickY || accel > 0 || brake > 0) {
             // Y は「最小値側 = スティック上 = アクセル」
             const double center = (static_cast<double>(s.rangeMin[1]) + s.rangeMax[1]) / 2;
             const double half = (static_cast<double>(s.rangeMax[1]) - s.rangeMin[1]) / 2;
@@ -183,6 +187,17 @@ BOOL CALLBACK EnumObjectsLog(LPCDIDEVICEOBJECTINSTANCEA o, LPVOID) {
 HRESULT STDMETHODCALLTYPE Dev_GetCapabilities(IDirectInputDevice2A* self, LPDIDEVCAPS caps) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice2A*, LPDIDEVCAPS)>(self, 3);
     HRESULT hr = fn(self, caps);
+    if (SUCCEEDED(hr) && caps) {
+        if (DeviceState* s = DeviceSlot(self)) {
+            s->isWheel = GET_DIDEVICE_TYPE(caps->dwDevType) == DIDEVTYPE_JOYSTICK &&
+                         GET_DIDEVICE_SUBTYPE(caps->dwDevType) == DIDEVTYPEJOYSTICK_WHEEL;
+        }
+    }
+    // ゲーム (Input_SetupDevice 0x4688DE) はこのフラグを見て AUTOCENTER 設定と ConstantForce 作成を行う
+    if (SUCCEEDED(hr) && caps && !GetConfig().forceFeedback && (caps->dwFlags & DIDC_FORCEFEEDBACK)) {
+        caps->dwFlags &= ~DIDC_FORCEFEEDBACK;
+        Log("%p->GetCapabilities: DIDC_FORCEFEEDBACK hidden (ForceFeedback=0)", static_cast<void*>(self));
+    }
     if (caps) {
         Log("%p->GetCapabilities -> 0x%08lX flags=0x%lX devType=0x%lX axes=%lu buttons=%lu povs=%lu ffPeriod=%lu",
             static_cast<void*>(self), static_cast<unsigned long>(hr), caps->dwFlags, caps->dwDevType, caps->dwAxes,
@@ -345,10 +360,31 @@ HRESULT STDMETHODCALLTYPE Dev_QueryInterface(IUnknown* self, REFIID riid, void**
 struct EnumDevCtx {
     LPDIENUMDEVICESCALLBACKA cb;
     LPVOID ctx;
+    int nameMatches;
 };
+
+bool ContainsNoCase(const char* s, const std::string& sub) {
+    for (; *s; ++s) {
+        if (_strnicmp(s, sub.c_str(), sub.size()) == 0) {
+            return true;
+        }
+    }
+    return sub.empty();
+}
 
 BOOL CALLBACK EnumDevicesWrap(LPCDIDEVICEINSTANCEA d, LPVOID p) {
     auto* c = static_cast<EnumDevCtx*>(p);
+    // DeviceName 指定があれば、一致しないゲームコントローラはゲームに見せない
+    const Config& cfg = GetConfig();
+    if (!cfg.inputDeviceName.empty() && GET_DIDEVICE_TYPE(d->dwDevType) == DIDEVTYPE_JOYSTICK) {
+        const bool match = ContainsNoCase(d->tszProductName, cfg.inputDeviceName) &&
+                           (++c->nameMatches == cfg.inputDeviceIndex || cfg.inputDeviceIndex == 0);
+        if (!match) {
+            Log("    device type=0x%08lX product=\"%s\" guidProduct=%s -> hidden (DeviceName)", d->dwDevType,
+                d->tszProductName, GuidStr(&d->guidProduct).c_str());
+            return DIENUM_CONTINUE;
+        }
+    }
     // ゲーム (Input_EnumJoystickCb) は dwDevType のサブタイプで F5 Device Settings の選択肢を決める。
     // 設定があれば、サブタイプだけ書き換えたコピーを渡す
     DIDEVICEINSTANCEA copy;
@@ -371,7 +407,7 @@ HRESULT STDMETHODCALLTYPE DI_EnumDevices(IDirectInputA* self, DWORD type, LPDIEN
                                          DWORD flags) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectInputA*, DWORD, LPDIENUMDEVICESCALLBACKA, LPVOID, DWORD)>(self, 4);
     Log("IDirectInput::EnumDevices(type=%lu flags=0x%lX)", type, flags);
-    EnumDevCtx c{cb, ctx};
+    EnumDevCtx c{cb, ctx, 0};
     HRESULT hr = cb ? fn(self, type, EnumDevicesWrap, &c, flags) : fn(self, type, cb, ctx, flags);
     Log("IDirectInput::EnumDevices -> 0x%08lX", static_cast<unsigned long>(hr));
     return hr;

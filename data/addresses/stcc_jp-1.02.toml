@@ -442,6 +442,54 @@ addr = 0x00468AD0
 confidence = "confirmed"
 note = "IDirectInputDevice2::CreateEffect(GUID_ConstantForce)"
 
+[[function]]
+name = "FF_SetConstantForceA"
+addr = 0x00468220
+confidence = "confirmed"
+note = "(player, magnitude)。Input_GetDevType が 3 なら ×1000、8 なら ×10000 で SetParameters(方向 0x6978)。それ以外の機種（汎用ホイール=7 等）は更新せず、どの機種でも最後に FF_StartEffect を呼ぶ → 初期値のエフェクトが鳴るだけ"
+
+[[function]]
+name = "FF_SetConstantForceB"
+addr = 0x00468290
+confidence = "confirmed"
+note = "(player, dir, magnitude)。dir>0 で方向 0x2328、<=0 で 0x6978。種別 3/8 のみ SetParameters、最後に FF_StartEffect"
+
+[[function]]
+name = "FF_StartEffect"
+addr = 0x004681A0
+confidence = "confirmed"
+note = "(player) エフェクトポインタ(+0x896378)が非 null なら IDirectInputEffect::Start(1, 0)、再生中フラグ +0x89637C = 1"
+
+[[function]]
+name = "FF_StopEffect"
+addr = 0x004681E0
+confidence = "confirmed"
+note = "(player) エフェクトが非 null なら Stop、フラグ 0"
+
+[[function]]
+name = "Input_HasForceFeedback"
+addr = 0x004689D0
+confidence = "confirmed"
+note = "(index) g_JoystickCaps.dwFlags の DIDC_FORCEFEEDBACK(0x100)。Input_SetupDevice(0x4688DE) で真なら Input_SetAutocenter と Input_CreateDeviceEffect。stccfix [Input] ForceFeedback=0 はこのフラグを隠す"
+
+[[function]]
+name = "Input_SetAutocenter"
+addr = 0x00468990
+confidence = "confirmed"
+note = "(dev) SetProperty(DIPROP_AUTOCENTER, DIPH_DEVICE, 1)"
+
+[[function]]
+name = "Input_CreateDeviceEffect"
+addr = 0x004689F0
+confidence = "confirmed"
+note = "(index) FF_CreateConstantForce(dev, 30000, 0, 10000, &effect(+0x896378))"
+
+[[function]]
+name = "Input_GetAxisCount"
+addr = 0x00468A30
+confidence = "confirmed"
+note = "(index) g_JoystickCaps.dwAxes。2 より多ければ Z 軸レンジ 48..208 を設定"
+
 [[global]]
 name = "g_KnownJoystickNames"
 addr = 0x004BF4B0

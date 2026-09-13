@@ -1,9 +1,11 @@
 // joylog: ゲームとは独立に DirectInput8 でゲームコントローラの入力と切断/再接続を記録する診断ツール。
 //
-//   joylog.exe [秒数=600] [出力ファイル=joylog.txt]
+//   joylog.exe [秒数=600] [出力ファイル=joylog.txt] [デバイス名の一部[#何台目]]
 //
+// - 最初の列挙で接続中のゲームコントローラを全部記録し、名前が一致した 1 台を開く（省略時は先頭。
+//   "fanatec#2" なら名前が一致した 2 台目）
 // - 非排他・バックグラウンドで読むので、ウィンドウにフォーカスが無くても記録できる
-// - 値の変化（軸は生値で ±3000 超）、押された/離されたボタン番号、POV を記録
+// - 値の変化（軸・スライダーは生値で ±3000 超）、押された/離されたボタン番号、POV を記録
 // - 切断（GetDeviceState 失敗）を検出したら 1 秒ごとに再列挙し、再接続までの時間を記録
 // - 10 秒ごとに接続状態と steam.exe の起動有無を記録（Steam Input の影響切り分け用）
 #define DIRECTINPUT_VERSION 0x0800
@@ -16,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <string>
 
 namespace {
@@ -65,18 +68,44 @@ bool SteamRunning() {
     return found;
 }
 
+const wchar_t* g_filter = nullptr;
+int g_filterIndex = 1;  // 同名デバイスが複数あるときの何台目か（"名前#2"）
+
+bool ContainsNoCase(const wchar_t* s, const wchar_t* sub) {
+    for (; *s; ++s) {
+        size_t i = 0;
+        while (sub[i] && s[i] && towlower(s[i]) == towlower(sub[i])) {
+            ++i;
+        }
+        if (!sub[i]) {
+            return true;
+        }
+    }
+    return !*sub;
+}
+
 struct Found {
     GUID guid;
     bool ok;
+    bool list;
+    int matches;
     wchar_t name[MAX_PATH];
 };
 
 BOOL CALLBACK EnumDevicesCb(LPCDIDEVICEINSTANCEW d, LPVOID p) {
     auto* f = static_cast<Found*>(p);
-    f->guid = d->guidInstance;
-    wcscpy_s(f->name, d->tszProductName);
-    f->ok = true;
-    return DIENUM_STOP;
+    const bool match = (!g_filter || ContainsNoCase(d->tszProductName, g_filter)) && ++f->matches == g_filterIndex;
+    if (f->list) {
+        const GUID& g = d->guidProduct;
+        Log("device \"%s\" product={%08lX-%04X-%04X} devType=0x%08lX%s", Utf8(d->tszProductName).c_str(), g.Data1,
+            g.Data2, g.Data3, d->dwDevType, match && !f->ok ? " <- open" : "");
+    }
+    if (match && !f->ok) {
+        f->guid = d->guidInstance;
+        wcscpy_s(f->name, d->tszProductName);
+        f->ok = true;
+    }
+    return f->ok && !f->list ? DIENUM_STOP : DIENUM_CONTINUE;
 }
 
 BOOL CALLBACK EnumObjectsCb(LPCDIDEVICEOBJECTINSTANCEW o, LPVOID) {
@@ -97,6 +126,7 @@ void LogOpenFailure(const char* reason, HRESULT hr) {
 
 IDirectInputDevice8W* Open(IDirectInput8W* di, HWND hwnd, bool verbose) {
     Found f{};
+    f.list = verbose;
     HRESULT hr = di->EnumDevices(DI8DEVCLASS_GAMECTRL, EnumDevicesCb, &f, DIEDFL_ATTACHEDONLY);
     if (FAILED(hr) || !f.ok) {
         LogOpenFailure(FAILED(hr) ? "EnumDevices failed" : "no attached game controller", hr);
@@ -136,6 +166,11 @@ IDirectInputDevice8W* Open(IDirectInput8W* di, HWND hwnd, bool verbose) {
 int wmain(int argc, wchar_t** argv) {
     const int seconds = argc > 1 ? _wtoi(argv[1]) : 600;
     const wchar_t* path = argc > 2 ? argv[2] : L"joylog.txt";
+    g_filter = argc > 3 ? argv[3] : nullptr;
+    if (wchar_t* hash = g_filter ? wcschr(argv[3], L'#') : nullptr) {
+        *hash = L'\0';
+        g_filterIndex = _wtoi(hash + 1);
+    }
     // 実行中も他プロセスから読めるよう、書き込みだけを拒否する共有モードで開く
     g_out = _wfsopen(path, L"w", _SH_DENYWR);
     g_start = GetTickCount();
@@ -205,7 +240,9 @@ int wmain(int argc, wchar_t** argv) {
                 const bool buttonsChanged = std::memcmp(js.rgbButtons, last.rgbButtons, sizeof(js.rgbButtons)) != 0;
                 const bool changed = !hasLast || moved(js.lX, last.lX) || moved(js.lY, last.lY) ||
                                      moved(js.lZ, last.lZ) || moved(js.lRx, last.lRx) || moved(js.lRy, last.lRy) ||
-                                     moved(js.lRz, last.lRz) || js.rgdwPOV[0] != last.rgdwPOV[0] || buttonsChanged;
+                                     moved(js.lRz, last.lRz) || moved(js.rglSlider[0], last.rglSlider[0]) ||
+                                     moved(js.rglSlider[1], last.rglSlider[1]) || js.rgdwPOV[0] != last.rgdwPOV[0] ||
+                                     buttonsChanged;
                 if (changed) {
                     std::string edges;
                     if (hasLast && buttonsChanged) {
@@ -217,8 +254,9 @@ int wmain(int argc, wchar_t** argv) {
                             }
                         }
                     }
-                    Log("X=%5ld Y=%5ld Z=%5ld Rx=%5ld Ry=%5ld Rz=%5ld POV=%5ld%s", js.lX, js.lY, js.lZ, js.lRx, js.lRy,
-                        js.lRz, static_cast<long>(js.rgdwPOV[0]), edges.c_str());
+                    Log("X=%5ld Y=%5ld Z=%5ld Rx=%5ld Ry=%5ld Rz=%5ld S0=%5ld S1=%5ld POV=%5ld%s", js.lX, js.lY, js.lZ,
+                        js.lRx, js.lRy, js.lRz, js.rglSlider[0], js.rglSlider[1], static_cast<long>(js.rgdwPOV[0]),
+                        edges.c_str());
                     last = js;
                     hasLast = true;
                 }
