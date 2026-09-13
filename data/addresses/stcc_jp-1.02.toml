@@ -197,7 +197,7 @@ note = "cmd 32775: LoadMenu(0x81), g_UseDirect3D=0, 再初期化"
 name = "D3DSettings_Load"
 addr = 0x0043A230
 confidence = "confirmed"
-note = "STCCD3D.DAT: WORD 0x100 + 0x14 バイト {g_UseDirect3D, opt[0], opt[1], opt[2], opt[3]}（opt は 0x43C880/0x43C890 で set/get）。無ければ UseDirect3D=0, opt=1"
+note = "STCCD3D.DAT (23 bytes): WORD 0x100, BYTE sum?, int32 x5 {g_UseDirect3D, opt[0], opt[1], opt[2], opt[3]}（opt は 0x43C880/0x43C890 で set/get）。実測: D3D=`00 01 05 01..`、DDraw=`00 01 04 00..`（1バイト目は5値の合計＝チェックサムと推定）。無ければ UseDirect3D=0, opt=1。保存は正常終了時"
 
 [[function]]
 name = "D3DSettings_Save"

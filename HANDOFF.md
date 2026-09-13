@@ -169,8 +169,24 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - MFC の設定キー `HKCU\Software\SEGA\SEGA Touring Car Championship for PC\{Settings, Recent File List}` が作られるが値は空。`C:\WINDOWS\stcc.ini` への書き込み・VirtualStore 分岐・ゲームフォルダへの新規ファイルはなし
 - **結論: 素の DirectDraw は Win11 マルチモニタ環境では実用不可 → ラッパー必須**
 
+### dgVoodoo2 v2.87.4 でのテスト結果（2026-09-13）
+設定: `tools\dgvoodoo\dgVoodoo.conf`（ウィンドウ化, stretched_ar, FPSLimit 60, SystemHookFlags=gdi, DesktopBitDepth=16）
+
+| 構成 | 結果 |
+|---|---|
+| 原本 `STCC.EXE`（全画面）+ DirectDraw | 起動・BGM（CD-DA）・速度 OK、Alt+Tab で落ちない。**メニューバーは描画されない**（非クライアント領域は gdi フックの対象外）。F5 等のダイアログは表示・操作可能 |
+| テスト exe（`testpatch.py windowed`、ウィンドウ）+ DirectDraw | **表示・BGM・速度 OK、メニューバー表示、Game→Exit で正常終了**（`DesktopBitDepth=16` 前は画面が緑一色） |
+| テスト exe（ウィンドウ）+ Direct3D | 「Direct3Dモードでは起動できません。」→ `STCCD3D.DAT` に D3D 選択が保存され以後起動不能（ファイル退避で復旧） |
+| 原本（全画面）+ Direct3D（F3 → Alt → D → Enter で盲目操作） | **切替成功、全画面でプレイ可能。** ただしメニューが見えず中断・終了できず強制終了 |
+
+操作メモ: F3 = ポーズ/メニューモード切替（カーソル＋メニュー）、Esc = メニューモード解除、Alt+F4 = 終了、F5〜F9 = 各種設定ダイアログ
+
 ### 次にやること
-- [ ] dgVoodoo2 を配置済み（`tools\wrapper.ps1 enable`、設定 `tools\dgvoodoo\dgVoodoo.conf`）→ 同じ項目で起動テスト
+- [ ] **Phase 3**: `dinput.dll` プロキシ DLL の骨格（CMake + MinHook）
+  - 版判定（SHA-256）、ログ出力
+  - `g_bFullscreen` 初期化パッチ（0x43964D）を DLL のメモリパッチとして実装 → テスト exe を廃止
+  - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
+  - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
 - [ ] **Phase 3**: `dinput.dll` プロキシの骨格（CMake、MinHook、ini、ログ、版判定、DDraw/D3D/DInput/MCI 呼び出しログ）
 - [ ] `tools/run.ps1`（ビルド → 配置 → 起動 → ログ回収）
