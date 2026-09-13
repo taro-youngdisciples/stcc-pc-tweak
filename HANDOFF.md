@@ -244,8 +244,12 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - stccfix `hooks_window.cpp`: 起動時に窓を自動拡大（`WindowScale=0` = 作業領域に収まる最大整数倍、4K で 2560x1920）、ドラッグ時 4:3 拘束、利用者サイズの記憶、`WM_WINDOWPOSCHANGING` で 640x480 / 320x240 要求を差し替え＋300ms 後に 1px ナッジで WM_SIZE を再通知。`[Debug] LogWindow` で SetWindowPos/MoveWindow の呼び出し元を記録
 - dgVoodoo `Resolution` は倍率（4x）だと 320x240 のレースが 1280x960 止まりになるため、固定 `2560x1920` に変更
 
+- **ユーザー確認（2026-09-13）: レース開始でも窓が大きいまま維持。Screen Mode 640x480 のほうが 320x240 より明らかに綺麗** → 推奨設定は Direct3D + Screen Mode 640x480 16bit
+- **マイルストーン「4K で見やすい表示」達成**。残る見た目の課題: HUD・文字などの 2D スプライトは 640x480 素材の拡大なのでドットが粗い（素材由来、ワイド化時の HUD 配置と合わせて扱う）
+
 ### 次にやること
-- [ ] レース開始時の窓縮小が 320x240 対応で直ったか確認
+- [ ] Phase 5b ワイド化の解析（投影・カリング・HUD）
+- [ ] Phase 4 残課題（自動再接続、Steam の PS4 対応 OFF 確認）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
   - `C:\WINDOWS\stcc.ini` 読み書きのリダイレクト（任意）
 - [ ] Win11 での不具合を一覧化（§4-0 のチェック）、基準状態をバックアップ
