@@ -10,6 +10,7 @@
 #include <ddraw.h>
 #include <d3d.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -257,6 +258,11 @@ struct DrawStats {
     long byVertexType[4] = {};  // 0:? 1:D3DVT_VERTEX 2:D3DVT_LVERTEX 3:D3DVT_TLVERTEX
     long setTransform = 0;
     long setRenderState = 0;
+    long bgQuads = 0;  // ワイド化で「画面幅いっぱいの背景」と判定した数
+    long blt = 0;
+    long bltFast = 0;
+    long bltMinX = 1000000, bltMaxX = -1000000;  // Blt/BltFast の転送先 x 範囲
+    long bltMinW = 1000000, bltMaxW = -1000000;  // 転送先の幅
     float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f;
     float minZ = 1e9f, maxZ = -1e9f, minRhw = 1e9f, maxRhw = -1e9f;
 };
@@ -296,10 +302,13 @@ void FlushDrawStatsLocked() {
     }
     if (g_draw.frames > 0) {
         Log("[draw/s] frames=%ld DP=%ld DIP=%ld verts=%ld vtype{1:%ld 2:%ld 3:%ld} SetTransform=%ld SetRenderState=%ld "
-            "TL x[%.1f..%.1f] y[%.1f..%.1f] z[%.4f..%.4f] rhw[%.5f..%.5f]",
+            "TL x[%.1f..%.1f] y[%.1f..%.1f] z[%.4f..%.4f] rhw[%.5f..%.5f] bgQuads=%ld",
             g_draw.frames, g_draw.drawPrim, g_draw.drawIndexed, g_draw.vertices, g_draw.byVertexType[1],
             g_draw.byVertexType[2], g_draw.byVertexType[3], g_draw.setTransform, g_draw.setRenderState, g_draw.minX,
-            g_draw.maxX, g_draw.minY, g_draw.maxY, g_draw.minZ, g_draw.maxZ, g_draw.minRhw, g_draw.maxRhw);
+            g_draw.maxX, g_draw.minY, g_draw.maxY, g_draw.minZ, g_draw.maxZ, g_draw.minRhw, g_draw.maxRhw,
+            g_draw.bgQuads);
+        Log("[blt/s] Blt=%ld BltFast=%ld dest x[%ld..%ld] w[%ld..%ld]", g_draw.blt, g_draw.bltFast,
+            g_draw.bltMinX, g_draw.bltMaxX, g_draw.bltMinW, g_draw.bltMaxW);
     }
     g_draw = DrawStats{};
     g_draw.windowStart = now;
@@ -310,7 +319,29 @@ void FlushDrawStatsLocked() {
 // その x を画面中心から k 倍に縮めたコピーを渡し、窓側（16:9 等）で横に引き伸ばすと、縦の視野はそのままで横が広がる。
 // ゲームのカリングは 4:3 前提なので、画面端で物体が湧く問題はゲーム側の修正で別途対処する。
 float g_viewportCenterX = 320.0f;  // SetViewport2 で更新
+float g_viewportWidth = 640.0f;
 thread_local std::vector<D3DTLVERTEX> t_wideVerts;
+
+// 画面幅いっぱいの背景ポリゴン（空など）か: 全頂点の x が左端か右端にぴったり乗っている
+bool IsFullWidthQuad(const D3DTLVERTEX* v, DWORD count) {
+    if (count < 3 || count > 8) {
+        return false;
+    }
+    const float left = g_viewportCenterX - g_viewportWidth * 0.5f;
+    const float right = g_viewportCenterX + g_viewportWidth * 0.5f;
+    bool hasLeft = false;
+    bool hasRight = false;
+    for (DWORD i = 0; i < count; ++i) {
+        if (std::fabs(v[i].sx - left) <= 1.01f) {
+            hasLeft = true;
+        } else if (std::fabs(v[i].sx - right) <= 1.01f) {
+            hasRight = true;
+        } else {
+            return false;
+        }
+    }
+    return hasLeft && hasRight;
+}
 
 LPVOID WidenVertices(D3DVERTEXTYPE vtype, LPVOID verts, DWORD count) {
     static const float k = static_cast<float>(WidescreenScale(GetConfig()));
@@ -319,6 +350,28 @@ LPVOID WidenVertices(D3DVERTEXTYPE vtype, LPVOID verts, DWORD count) {
     }
     const auto* src = static_cast<const D3DTLVERTEX*>(verts);
     t_wideVerts.assign(src, src + count);
+
+    if (IsFullWidthQuad(src, count)) {
+        // 背景は縮めない（窓の引き伸ばしで画面幅いっぱいに戻る）。
+        // extend ならテクスチャの横範囲を 1/k 倍に広げ、引き伸ばされない本来の比率で見せる
+        if (GetConfig().wideBackgroundExtend) {
+            float minU = t_wideVerts[0].tu;
+            float maxU = t_wideVerts[0].tu;
+            for (const auto& v : t_wideVerts) {
+                minU = v.tu < minU ? v.tu : minU;
+                maxU = v.tu > maxU ? v.tu : maxU;
+            }
+            const float cu = (minU + maxU) * 0.5f;
+            for (auto& v : t_wideVerts) {
+                v.tu = cu + (v.tu - cu) / k;
+            }
+        }
+        if (GetConfig().logGraphics) {
+            ++g_draw.bgQuads;  // 呼び出し元（DrawPrimitive フック）でロック済みではないが、統計用なので厳密さは不要
+        }
+        return t_wideVerts.data();
+    }
+
     const float cx = g_viewportCenterX;
     for (auto& v : t_wideVerts) {
         v.sx = cx + (v.sx - cx) * k;
@@ -393,7 +446,9 @@ HRESULT STDMETHODCALLTYPE Vp2_SetViewport2(IDirect3DViewport2* self, LPD3DVIEWPO
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DViewport2*, LPD3DVIEWPORT2)>(self, 17);
     HRESULT hr = fn(self, vp);
     if (vp && SUCCEEDED(hr) && vp->dwWidth >= 160) {
-        g_viewportCenterX = static_cast<float>(vp->dwX) + static_cast<float>(vp->dwWidth) * 0.5f;
+        // 640 と 639 の 2 種類が交互に来るので、幅は大きい方に丸める
+        g_viewportWidth = static_cast<float>((vp->dwWidth + 1) & ~1UL);
+        g_viewportCenterX = static_cast<float>(vp->dwX) + g_viewportWidth * 0.5f;
     }
     static D3DVIEWPORT2 last{};
     if (vp && std::memcmp(vp, &last, sizeof(last)) != 0) {
@@ -464,6 +519,36 @@ HRESULT STDMETHODCALLTYPE Surf_GetAttachedSurface(IDirectDrawSurface* self, LPDD
     return hr;
 }
 
+// Blt / BltFast は HUD 等の 2D 描画の調査用に件数と転送先範囲だけを集計する
+void AccumulateBlt(bool fast, long x, long w) {
+    if (!GetConfig().logGraphics) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_drawLock);
+    (fast ? g_draw.bltFast : g_draw.blt) += 1;
+    g_draw.bltMinX = x < g_draw.bltMinX ? x : g_draw.bltMinX;
+    g_draw.bltMaxX = x > g_draw.bltMaxX ? x : g_draw.bltMaxX;
+    g_draw.bltMinW = w < g_draw.bltMinW ? w : g_draw.bltMinW;
+    g_draw.bltMaxW = w > g_draw.bltMaxW ? w : g_draw.bltMaxW;
+    ReleaseSRWLockExclusive(&g_drawLock);
+}
+
+HRESULT STDMETHODCALLTYPE Surf_Blt(IDirectDrawSurface* self, LPRECT dest, LPDIRECTDRAWSURFACE src, LPRECT srcRect,
+                                   DWORD flags, LPDDBLTFX fx) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, LPRECT, LPDIRECTDRAWSURFACE, LPRECT, DWORD, LPDDBLTFX)>(self, 5);
+    if (dest) {
+        AccumulateBlt(false, dest->left, dest->right - dest->left);
+    }
+    return fn(self, dest, src, srcRect, flags, fx);
+}
+
+HRESULT STDMETHODCALLTYPE Surf_BltFast(IDirectDrawSurface* self, DWORD x, DWORD y, LPDIRECTDRAWSURFACE src, LPRECT srcRect,
+                                       DWORD trans) {
+    auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, DWORD, DWORD, LPDIRECTDRAWSURFACE, LPRECT, DWORD)>(self, 7);
+    AccumulateBlt(true, static_cast<long>(x), srcRect ? srcRect->right - srcRect->left : -1);
+    return fn(self, x, y, src, srcRect, trans);
+}
+
 HRESULT STDMETHODCALLTYPE Surf_SetClipper(IDirectDrawSurface* self, LPDIRECTDRAWCLIPPER clip) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirectDrawSurface*, LPDIRECTDRAWCLIPPER)>(self, 28);
     HRESULT hr = fn(self, clip);
@@ -516,6 +601,8 @@ void HookDevice2(IDirect3DDevice2* dev) {
 void HookSurface(IDirectDrawSurface* s) {
     PatchVtable(s, 0, Any_QueryInterface, "QueryInterface");
     PatchVtable(s, 3, Surf_AddAttachedSurface, "Surface::AddAttachedSurface");
+    PatchVtable(s, 5, Surf_Blt, "Surface::Blt");
+    PatchVtable(s, 7, Surf_BltFast, "Surface::BltFast");
     PatchVtable(s, 12, Surf_GetAttachedSurface, "Surface::GetAttachedSurface");
     PatchVtable(s, 28, Surf_SetClipper, "Surface::SetClipper");
 }

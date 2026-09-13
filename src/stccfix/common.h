@@ -23,6 +23,8 @@ struct Config {
     // 窓をこの比率にして dgVoodoo に横へ引き伸ばさせる
     int aspectW = 4;
     int aspectH = 3;
+    // 画面幅いっぱいの背景（空など）の扱い。true = テクスチャ座標を広げて比率を保つ / false = 横に引き伸ばす
+    bool wideBackgroundExtend = true;
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
     bool logWindow = false;    // 窓サイズ変更（SetWindowPos/MoveWindow の呼び出し元、WM_SIZE）をログ

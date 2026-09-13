@@ -51,6 +51,9 @@ Config LoadConfig(const std::wstring& iniPath) {
         c.aspectW = aw;
         c.aspectH = ah;
     }
+    wchar_t bg[16];
+    GetPrivateProfileStringW(L"Display", L"WideBackground", L"extend", bg, static_cast<DWORD>(std::size(bg)), ini);
+    c.wideBackgroundExtend = _wcsicmp(bg, L"stretch") != 0;
     c.logGraphics = GetPrivateProfileIntW(L"Debug", L"LogGraphics", c.logGraphics ? 1 : 0, ini) != 0;
     c.logInput = GetPrivateProfileIntW(L"Debug", L"LogInput", c.logInput ? 1 : 0, ini) != 0;
     c.logWindow = GetPrivateProfileIntW(L"Debug", L"LogWindow", c.logWindow ? 1 : 0, ini) != 0;
