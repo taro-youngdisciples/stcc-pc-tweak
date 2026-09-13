@@ -270,10 +270,11 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
   - `SetViewport(2)` / `Clear`: 全幅を広げる。`Blt`: 表示転送は広げた幅ごと、描画面への Blt は +offset。`BltFast` は x+offset
   - **ユーザー確認（スクリーンショット 2 枚）: HUD は伸びずに中央 4:3 領域へ、3D は画面全幅、空も自然、他車も画面右端まで描画**
 
+- **32:9 もユーザー確認（2026-09-13, 4K 画面で窓 3413x960、描画面 1706x480、dgVoodoo 3413x960）**: タイトル/メニューは中央 4:3 で左右は黒（ゴミなし）、レースは全幅に 3D、HUD は伸びずに中央。速度も問題なし
+  - 比率の切り替えは `tools\aspect.ps1 <W:H> [-RenderHeight N]`（配置済み stccfix.ini の AspectRatio と dgVoodoo.conf の Resolution を同時に変更）
+
 ### 次にやること
-- [ ] メニュー画面（2D のみ）の左右余白の見え方確認
-- [ ] （任意）HUD を画面端へ寄せる: スプライトキュー（Spr_RenderQueue 0x46D020 / 登録 0x46CE10）の x を左右アンカーで調整。レンダラの 640 クリップの扱いを要調査
-- [ ] 21:9 / 32:9 の確認（AspectRatio と dgVoodoo Resolution を変えるだけのはず）
+- [ ] （推奨）HUD を画面端へ寄せる: 32:9 では HUD が中央に集まる。スプライトキュー（Spr_RenderQueue 0x46D020 / 登録 0x46CE10）の x を左右アンカーで調整。レンダラの 640 クリップの扱いを要調査
 - [ ] （任意）カリング幅の拡張、路面の継ぎ目
 - [ ] Phase 4 残課題（自動再接続、Steam の PS4 対応 OFF 確認）
   - DirectDraw / Direct3D の COM 呼び出しログ → **ウィンドウ時に D3D 初期化のどこで失敗するか特定**（ゲーム側のエラー報告関数 0x42F290 は空）
