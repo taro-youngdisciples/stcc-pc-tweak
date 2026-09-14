@@ -324,6 +324,18 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - **インタラクション制限: collaborators_only、期限 2027-03-13**（GitHub の上限 6 か月）。延長するなら期限前に `gh api -X PUT repos/taro-youngdisciples/stcc-pc-tweak/interaction-limits -f limit=collaborators_only -f expiry=six_months`
 - 次の候補: 60fps 化（28 FPS 上限の原因調査: タイマー精度 / 1 描画 2 ステップ / 30Hz ロジック）、テレメトリ方式の FFB
 
+### 60fps 化の調査（2026-09-14、静的解析のみ。詳細は stcc_jp-1.02.toml の「フレームの流れとタイミング」）
+- このPCには Ghidra/JDK が無い（プロジェクトファイルだけコピー済み）→ capstone で解析
+- **フレームの流れ**: App_Run(0x439A00, CWinApp::Run) が待たずに Game_Frame(0x417400) を回す。1 回 = 入力 → 状態関数 1 回 → 描画 → 上限
+- **28 FPS の原因**: Frame_Limit30(0x417130) が GetTickCount で「3 フレーム 100ms」までビジーウェイト。GetTickCount の 15.6ms 刻みで実測約 28 FPS・不安定。有効条件は g_FrameFlags(0x10F61A0) bit0
+- **設計は 30Hz 固定ステップ**: 全状態関数が毎フレーム FrameSkip_SetTarget(33ms) を呼び、遅れると描画だけ省く（FrameSkip 0x7F5210）。レース本体 Race_UpdateRunning(0x41B410) の物理は車ごとに 1 ステップ 1 回で、サブステップなし。1/30・1/60 の浮動小数点定数も無い（固定小数点で 1 ステップ分ずつ）
+- → 上限を外すと**ロジックごと倍速**になる見込み。今の 28 FPS はゲーム速度も約 93% に落ちている可能性（要実測）
+- 方針候補
+  1. **正確な 30.00 FPS**（Frame_Limit30 を QueryPerformanceCounter の待ちに差し替え）: 簡単。カクつきと速度低下を解消
+  2. **補間による 60fps 表示**: ロジックは 30Hz のまま、ステップ間に中間の姿勢で 1 回余分に描く。車の位置・向き・カメラなど「描画に使う状態」の特定が必要。リプレイ自由カメラ（目標 3）と同じ知識が要るので相乗効果あり。難度 中〜高
+  3. ロジックを 60Hz にして 1 ステップの量を半分: 定数が散らばっていて現実的でない
+- 次の手順案: (a) DLL に計測（Game_Frame の実回数/秒、描画回数、スキップ回数）と上限差し替えの実験オプション → 実機でレースの速度と FPS を確認 (b) 1 を実装 (c) 2 の可否を、描画関数を 1 ステップ内で 2 回呼んでも状態が進まないかから調べる
+
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
 - ツール: Git、VS Build Tools（C++ x86）、Python 3.13 + `.venv`（`tools\requirements.txt`）。Ghidra + JDK 21 は解析が必要になったときだけ

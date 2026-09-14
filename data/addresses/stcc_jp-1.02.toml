@@ -146,6 +146,129 @@ addr = 0x004170B0
 confidence = "likely"
 note = "レース中の毎フレーム描画列: 0x40C1E0 → 0x4420C0 → 0x443DA0 → 0x40BD50 → 0x435C20 → Spr_RenderQueue(desc) → 0x436AC0 → 0x46D110 → 0x435CE0。直前の 0x417080 で Gfx_LockRenderSurface"
 
+# ---- フレームの流れとタイミング（60fps 化の調査、2026-09-14）
+# 結論: ロジックは 30Hz 固定ステップで 1 ループ 1 回（物理も車ごとに 1 回、サブステップなし）。
+# 上限 Frame_Limit30 は GetTickCount の 15.6ms 刻みで実測約 28 FPS・不安定。遅れたときは描画だけ省く。
+
+[[function]]
+name = "App_Run"
+addr = 0x00439A00
+confidence = "confirmed"
+note = "CWinApp::Run の上書き（vtable 0x4A785C）。PeekMessage でメッセージを処理し、無ければ待たずに 0x439C60（Ctrl+テンキー +/- → 0x56CD30）→ 0x43A470(→0x468370 入力) → Game_Frame を繰り返す。0x56C194 / 0x56C198 が非 0 の間は止まる"
+
+[[function]]
+name = "Game_Frame"
+addr = 0x00417400
+confidence = "confirmed"
+note = "1 ループ = 1 ゲームステップ: 0x43F610 → 入力（word 0x10F1608 == 0 なら Frame_InputLocal 0x4174B0、非 0 なら 0x417560 = 通信対戦）→ g_FrameCounter++ → g_GameStateTable[g_GameState](0x1101060) → 0x4381F0 → 0x43C610 の値で描画 0/1: Frame_RenderA 0x416FA0 / Frame_RenderB 0x4171E0 → 0x46C6B0"
+
+[[function]]
+name = "Frame_InputLocal"
+addr = 0x004174B0
+confidence = "likely"
+note = "Input_UpdatePlayer(0, 1) と (1, [0x1101F10]) を呼ぶ（プレイヤー 0/1 の入力。サブステップではない）。0x1101068/0x1101069 でリプレイ用の状態を退避・復元"
+
+[[function]]
+name = "Input_UpdatePlayer"
+addr = 0x00416B20
+confidence = "likely"
+note = "(player, flag) 0x4175E0 でパッド状態を読み、ボタンのエッジ（word 0x1101914+player*2）を作る"
+
+[[function]]
+name = "Frame_RenderA"
+addr = 0x00416FA0
+confidence = "confirmed"
+note = "FrameSkip_ShouldRender が 0 なら描画を省き 0x46D200/0x416F60/0x443DF0 だけ。描画時: 0x4362B0(0) → 0x417080(Lock) → Race_RenderFrame2D → 0x417110(Unlock/表示)。g_FrameFlags bit0 なら Fps_Update → Frame_Limit30 → 0x417190 → 0x435AF0。最後に FrameSkip_Tick"
+
+[[function]]
+name = "Frame_RenderB"
+addr = 0x004171E0
+confidence = "confirmed"
+note = "Frame_RenderA と同じ構造（0x40EB20 の結果で 2 回ロックする経路あり、描画本体 0x417300/0x417320）。上限呼び出しは 0x417299"
+
+[[function]]
+name = "Frame_Limit30"
+addr = 0x00417130
+confidence = "confirmed"
+note = "GetTickCount の履歴 3 件 (0x4CF2D8、添字 0x4CF2E4) で「3 フレーム 100ms」になるまでビジーウェイト（1 回の待ちは最大 33ms）。GetTickCount の刻み 15.6ms のため実測約 28 FPS。cmp 0x64 @0x41714B/0x41716A、cmp 0x21 @0x417154"
+
+[[function]]
+name = "Wait33ms"
+addr = 0x00415670
+confidence = "confirmed"
+note = "(n) timeGetTime で n*33ms ビジーウェイト。呼び出し元 0x40B1D6, 0x40B1E0, 0x40B468（レース遷移の待ち）"
+
+[[function]]
+name = "FrameSkip_SetTarget"
+addr = 0x00445D70
+confidence = "confirmed"
+note = "thiscall(ms, maxSkip): [+0]=ms, [+4]=ms*4, [+8]=maxSkip。ラッパー 0x445EB0(ms, maxSkip) を全状態関数が毎フレーム (33, 0 or 1) で呼ぶ"
+
+[[function]]
+name = "FrameSkip_Tick"
+addr = 0x00445DD0
+confidence = "confirmed"
+note = "GetTickCount を 8 件のリング (+0x10) に記録。直近 4 フレームが [+4](132ms) 以上で連続スキップ数 [+0xC] < maxSkip なら次の描画を省く ([+0x34]=0)。ラッパー 0x445E90"
+
+[[function]]
+name = "FrameSkip_ShouldRender"
+addr = 0x00445E50
+confidence = "confirmed"
+note = "[+0x34] != 0 かつ [+0x38] == 0 なら 1。ラッパー 0x445EA0。コンストラクタ 0x445D90（ラッパー 0x445E80）"
+
+[[global]]
+name = "g_FrameSkip"
+addr = 0x007F5210
+type = "struct (0x3C bytes)"
+confidence = "confirmed"
+
+[[function]]
+name = "Fps_Update"
+addr = 0x00439BB0
+confidence = "confirmed"
+note = "有効フラグ 0x568938 が非 0 のとき、timeGetTime の 1 秒窓でフレーム数を数え 0x56CD40 に、文字列を 0x56CE48 に作り画面に描く（内蔵の FPS 表示）"
+
+[[global]]
+name = "g_FrameFlags"
+addr = 0x010F61A0
+type = "byte"
+confidence = "likely"
+note = "bit0 = フレーム制御（Fps_Update と Frame_Limit30）を行う。0x40C1E3, 0x40E590 でも参照。書き込みは絶対アドレスでは見つからない（設定ブロックの一括コピーとみられる）"
+
+[[global]]
+name = "g_FrameCounter"
+addr = 0x0128ABB0
+type = "int"
+confidence = "confirmed"
+note = "Game_Frame で毎ステップ +1。点滅などのアニメーションが参照"
+
+[[global]]
+name = "g_GameStateTable"
+addr = 0x004BA068
+type = "fn*[3]"
+confidence = "confirmed"
+note = "0x4292A0 (フロントエンド), 0x40B3D0 (レース), 0x4691B0 (通信対戦)。添字 g_GameState 0x1101060"
+
+[[global]]
+name = "g_RaceSubstateTable"
+addr = 0x004B8980
+type = "fn*[12]"
+confidence = "confirmed"
+note = "0x40B3D0 が [0x1101064] で分岐。4 = 0x41BBC0、5 = Race_UpdateRunning 0x41B410（この 2 つだけフレームスキップ許可）"
+
+[[function]]
+name = "Race_UpdateRunning"
+addr = 0x0041B410
+confidence = "likely"
+note = "レース走行中の 1 ステップ。プレイヤー車 i < [0x110228C] に 0x401720（物理）、残りの車 < [0x1101E1C] に 0x406150（AI）と 0x43DD70、プレイヤー車に 0x422830。ループは車ごとで、サブステップなし"
+
+[[global]]
+name = "g_CarArray"
+addr = 0x01101E18
+type = "struct car* (0xF8 bytes each)"
+confidence = "likely"
+note = "台数: プレイヤー 0x110228C、全体 0x1101E1C。車ごとのポインタ表 0x128B7C0（+0x58 がコース区間番号らしい）"
+
 [[function]]
 name = "Spr_RenderQueue"
 addr = 0x0046D020
