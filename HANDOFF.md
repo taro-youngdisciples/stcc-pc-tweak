@@ -351,6 +351,11 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - **(b) の設計**: 待ちを Frame_Limit30 ではなく Game_Frame の先頭で 1 ステップ 1/30 秒ごとに行い（元の上限は何もしない）、FrameSkip_ShouldRender を「締め切りから 1 周期以上遅れたときだけ省略（maxSkip は g_FrameSkip+8 を守る）」に置き換える。同じフレーム内の 2 回目の呼び出しには 1 回目と同じ値を返す。目標: ステップ 30・描画 30・省略 0・速さ 100%
 - README の設定表への TargetFps / LogFrame の追記は、(b) で仕様が固まってから
 
+### 60fps 化 (b) 正確な 30 FPS のペース配分（2026-09-14）
+- `hooks_frame.cpp` を上記の設計で実装（Game_Frame 先頭で 1/N 秒待ち、4 周期以上遅れたら数え直し、元の上限は待たない、描画省略は 1 周期以上遅れたステップだけ・g_FrameSkip+8 の上限と +0x38 の停止要求は守る、2 回目の ShouldRender には同じ値）
+- アトラクト（g_GameState=0）の自動計測 TargetFps=30: **ステップ 30.0・描画 30・遅れ 0・描画間隔 33.3ms で一定**（元は 34 ステップ・27〜28 描画・48ms）。数秒おきに 1 秒だけ省略約 10 回（late=0 なので +0x38 の停止要求 = 場面切替のゲーム仕様）、ロード時の空き 185ms 後はすぐ復帰
+- 残り: レースでの確認（ユーザー）、問題なければリリース既定を TargetFps=30 に・README の設定表に追記、その後 (c) 補間の可否調査
+
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
 - ツール: Git、VS Build Tools（C++ x86）、Python 3.13 + `.venv`（`tools\requirements.txt`）。Ghidra + JDK 21 は解析が必要になったときだけ
