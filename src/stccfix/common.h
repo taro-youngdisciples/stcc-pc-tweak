@@ -42,6 +42,10 @@ struct Config {
     bool logGraphics = false;  // DirectDraw/Direct3D 呼び出しとゲーム側 D3D 初期化関数の戻り値をログ
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
     bool logWindow = false;    // 窓サイズ変更（SetWindowPos/MoveWindow の呼び出し元、WM_SIZE）をログ
+    bool logFrame = false;     // 1 秒ごとのステップ数・描画/省略回数・上限の待ち時間をログ
+    // フレーム上限。0 = ゲームのまま（GetTickCount の待ちで約 28 FPS）、N = 高精度タイマーで N FPS。
+    // ゲームは 1 フレーム 1 ステップの 30Hz 固定なので、30 以外にするとゲームの速さも変わる（実験用）
+    int targetFps = 0;
     // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
     // ゲームは サブタイプ 4(GAMEPAD)→Game Pad、6(WHEEL)→Steering Wheel、それ以外→Joystick として選択肢を出す
     int inputDeviceSubtype = 0;
@@ -125,6 +129,10 @@ void InstallHudHooks();
 // ---------------------------------------------------------------- hooks_window.cpp
 // ウィンドウモードの窓サイズ維持と 4:3 リサイズ。jp-1.02 専用。DllMain から呼ぶ
 void InstallWindowHooks();
+
+// ---------------------------------------------------------------- hooks_frame.cpp
+// フレームの計測（LogFrame）と上限の差し替え（TargetFps）。jp-1.02 専用。DllMain から呼ぶ
+void InstallFrameHooks();
 
 // ---------------------------------------------------------------- hooks_game.cpp
 // ゲーム内の D3D 初期化関数（引数なし）の戻り値をログする。jp-1.02 専用。DllMain から呼ぶ

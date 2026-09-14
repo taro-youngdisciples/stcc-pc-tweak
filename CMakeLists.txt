@@ -29,6 +29,7 @@ add_library(stccfix SHARED
   src/stccfix/vtable_hook.cpp
   src/stccfix/hooks_ddraw.cpp
   src/stccfix/hooks_dinput.cpp
+  src/stccfix/hooks_frame.cpp
   src/stccfix/hooks_game.cpp
   src/stccfix/hooks_hud.cpp
   src/stccfix/hooks_window.cpp

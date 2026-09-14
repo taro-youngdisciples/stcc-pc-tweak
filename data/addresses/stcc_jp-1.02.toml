@@ -208,7 +208,13 @@ note = "thiscall(ms, maxSkip): [+0]=ms, [+4]=ms*4, [+8]=maxSkip。ラッパー 0
 name = "FrameSkip_Tick"
 addr = 0x00445DD0
 confidence = "confirmed"
-note = "GetTickCount を 8 件のリング (+0x10) に記録。直近 4 フレームが [+4](132ms) 以上で連続スキップ数 [+0xC] < maxSkip なら次の描画を省く ([+0x34]=0)。ラッパー 0x445E90"
+note = "GetTickCount を 8 件のリング (+0x10) に記録。直近 4 フレームが [+4](132ms) 以上で連続スキップ数 [+0xC] < maxSkip なら次の描画を省く ([+0x34]=0)。ラッパー 0x445E90。実測: 正確な 30.00 FPS (4 フレーム 133.3ms) でも基準を超えるため毎秒約 4 回省略し、ロジックが約 34 ステップ/秒（113%）になる。maxSkip は Game_Frame 0x417421 がフロントエンド (g_GameState=0) で 2、レース状態関数がサブ状態 4/5 で 1、その他 0"
+
+[[function]]
+name = "Frame_RenderA_SecondShouldRender"
+addr = 0x0041700E
+confidence = "confirmed"
+note = "描画後、FrameSkip_ShouldRender をもう一度呼び、非 0 なら Frame_Limit30 など。FrameSkip_Tick は関数の最後なので 1 回目と同じ値を返す。Frame_RenderB 側は 0x417290。描画を省いたフレーム（0x416FAB→0x417058）や Lock 失敗では上限を通らない"
 
 [[function]]
 name = "FrameSkip_ShouldRender"

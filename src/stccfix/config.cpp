@@ -66,6 +66,9 @@ Config LoadConfig(const std::wstring& iniPath) {
     c.logGraphics = GetPrivateProfileIntW(L"Debug", L"LogGraphics", c.logGraphics ? 1 : 0, ini) != 0;
     c.logInput = GetPrivateProfileIntW(L"Debug", L"LogInput", c.logInput ? 1 : 0, ini) != 0;
     c.logWindow = GetPrivateProfileIntW(L"Debug", L"LogWindow", c.logWindow ? 1 : 0, ini) != 0;
+    c.logFrame = GetPrivateProfileIntW(L"Debug", L"LogFrame", c.logFrame ? 1 : 0, ini) != 0;
+    c.targetFps = static_cast<int>(GetPrivateProfileIntW(L"Frame", L"TargetFps", c.targetFps, ini));
+    c.targetFps = c.targetFps <= 0 ? 0 : (c.targetFps < 10 ? 10 : (c.targetFps > 240 ? 240 : c.targetFps));
 
     wchar_t type[32];
     GetPrivateProfileStringW(L"Input", L"DeviceType", L"auto", type, static_cast<DWORD>(std::size(type)), ini);
