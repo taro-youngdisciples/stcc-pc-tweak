@@ -268,6 +268,72 @@ addr = 0x0041B410
 confidence = "likely"
 note = "レース走行中の 1 ステップ。プレイヤー車 i < [0x110228C] に 0x401720（物理）、残りの車 < [0x1101E1C] に 0x406150（AI）と 0x43DD70、プレイヤー車に 0x422830。ループは車ごとで、サブステップなし"
 
+# ---- 3D 描画の経路（補間の調査、2026-09-15）
+# LogDrawList の実測（アトラクト）: DrawPrimitive は 100% が Frame_RenderA/B の中から。呼び出し元は Gfx_DrawQuadTL（約 1000 回/フレーム）と Race_DrawSkyQuad（1 回/フレーム）。
+# 前フレームと同じ位置に同じ命令（種別・頂点数・テクスチャ・呼び出し元）が来るのは 15〜30%、先頭からの一致は約 1% → 毎フレーム並べ替えて描いている（Z バッファ不使用）
+
+[[function]]
+name = "Gfx_DrawQuadTL"
+addr = 0x00440D40
+confidence = "confirmed"
+note = "(quad desc, TL 頂点 4 個, ...) 0x434790 でデバイス取得 → SetRenderState(TEXTUREHANDLE / 0x29 / 0x16) → 0x468B90/0x468C40/0x468C90 → DrawPrimitive(TRIANGLEFAN=6, D3DVT_TLVERTEX=3, 4 頂点, flags=1) @0x440DE7。呼び出し元 0x443929（3D ポリゴン出力）, 0x451F77（2D の四角形、座標は 0x815D58〜）"
+
+[[global]]
+name = "g_PolyListA"
+addr = 0x007D47C8
+type = "PolyList"
+confidence = "confirmed"
+note = "3D ポリゴンの一覧（もう 1 つは g_PolyListB 0x7D43E8）。現在積み込み先へのポインタ g_PolyListCurrent 0x4BD710。PolyList のレイアウト: +0x9C 記録配列の先頭 / +0xA0 末尾（16 バイト/件、積み込み順）/ +0xA4 並べ替え済みポインタ配列 / +0xA8〜[+0x288] 別の 0x3C バイト/件の記録（線など、0x4411E0/0x441200 → 0x4520A0）"
+
+[[global]]
+name = "g_PolyListB"
+addr = 0x007D43E8
+type = "PolyList"
+confidence = "confirmed"
+
+[[global]]
+name = "g_PolyListCurrent"
+addr = 0x004BD710
+type = "PolyList*"
+confidence = "confirmed"
+note = "0x443C90 は現在の一覧に 0x442E40 を呼び、それが A なら B にも呼ぶ（リセットとみられる）"
+
+[[function]]
+name = "PolyList_Render"
+addr = 0x00443DA0
+confidence = "confirmed"
+note = "描画処理から呼ばれる。0x442110([0x7C43C8]) が非 0 なら A と B に PolyList_FlushIfReady → 0x442580(0) → 0x443C60(2) → [0x4BD6DC]=0x100000 → 0x443C90 → 0x442120"
+
+[[function]]
+name = "PolyList_FlushIfReady"
+addr = 0x00443B80
+confidence = "confirmed"
+note = "thiscall。0x442EF0(1) が非 0 なら PolyList_Flush → 0x452090"
+
+[[function]]
+name = "PolyList_Flush"
+addr = 0x00443A00
+confidence = "confirmed"
+note = "thiscall。0x445F50（並べ替えとみられる）→ 記録数 = ([+0xA0]-[+0x9C])>>4 の並べ替え済みポインタ [+0xA4] を順に PolyList_EmitOne → +0xA8 の 0x3C バイト記録を描く → 0x445F60"
+
+[[function]]
+name = "PolyList_EmitOne"
+addr = 0x004439D0
+confidence = "confirmed"
+note = "thiscall(record*)。0x43C610()==1（Direct3D）なら PolyList_EmitD3D、そうでなければ PolyList_EmitSoft 0x443940"
+
+[[function]]
+name = "PolyList_EmitD3D"
+addr = 0x00443570
+confidence = "confirmed"
+note = "thiscall(record*)。record: +0 材質*（+4/+5 テクスチャ番号、+6 フラグ）, +4 奥行き(16.16), +8 画面座標 int×(x,y)×4 と +0x20 から z int×4, +0xC フラグ。x,y × float[0x4A7A0C]、rhw = float[0x4A7A08] / z。this+0x358 に D3DTLVERTEX×4 を作り Gfx_DrawQuadTL"
+
+[[function]]
+name = "Race_DrawSkyQuad"
+addr = 0x0040E590
+confidence = "likely"
+note = "g_FrameFlags bit0 と 0x1101068 を見て、浮動小数点で四隅を計算した全画面の四角形を DrawPrimitive で 1 枚描く（@0x40E8DB）。空の背景とみられる。直後に 0x434C90"
+
 [[global]]
 name = "g_CarArray"
 addr = 0x01101E18

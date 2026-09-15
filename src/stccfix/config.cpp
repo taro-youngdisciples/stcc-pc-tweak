@@ -26,7 +26,7 @@ double WidescreenScale(const Config& c) {
 }
 
 bool GraphicsHooksNeeded(const Config& c) {
-    return c.logGraphics || WidescreenScale(c) != 1.0;
+    return c.logGraphics || c.logDrawList || WidescreenScale(c) != 1.0;
 }
 
 bool InputHooksNeeded(const Config& c) {
@@ -67,6 +67,7 @@ Config LoadConfig(const std::wstring& iniPath) {
     c.logInput = GetPrivateProfileIntW(L"Debug", L"LogInput", c.logInput ? 1 : 0, ini) != 0;
     c.logWindow = GetPrivateProfileIntW(L"Debug", L"LogWindow", c.logWindow ? 1 : 0, ini) != 0;
     c.logFrame = GetPrivateProfileIntW(L"Debug", L"LogFrame", c.logFrame ? 1 : 0, ini) != 0;
+    c.logDrawList = GetPrivateProfileIntW(L"Debug", L"LogDrawList", c.logDrawList ? 1 : 0, ini) != 0;
     c.targetFps = static_cast<int>(GetPrivateProfileIntW(L"Frame", L"TargetFps", c.targetFps, ini));
     c.targetFps = c.targetFps <= 0 ? 0 : (c.targetFps < 10 ? 10 : (c.targetFps > 240 ? 240 : c.targetFps));
 

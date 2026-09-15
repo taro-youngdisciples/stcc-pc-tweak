@@ -35,12 +35,31 @@ constexpr double kResyncPeriods = 4.0;
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 
+constexpr std::uintptr_t kFrameRenderA = 0x00416FA0;  // Frame_RenderA
+constexpr std::uintptr_t kFrameRenderB = 0x004171E0;  // Frame_RenderB
+
 using GameFrameFn = void(__cdecl*)();
 using ShouldRenderFn = int(__cdecl*)();
 using LimitFn = DWORD(__cdecl*)();
+using RenderFn = void(__cdecl*)();
 GameFrameFn g_origGameFrame = nullptr;
 ShouldRenderFn g_origShouldRender = nullptr;
 LimitFn g_origLimit = nullptr;
+RenderFn g_origRenderA = nullptr;
+RenderFn g_origRenderB = nullptr;
+int g_renderDepth = 0;  // Frame_RenderA/B の実行中なら 1 以上（ゲームのスレッドだけが触る）
+
+void __cdecl Hook_FrameRenderA() {
+    ++g_renderDepth;
+    g_origRenderA();
+    --g_renderDepth;
+}
+
+void __cdecl Hook_FrameRenderB() {
+    ++g_renderDepth;
+    g_origRenderB();
+    --g_renderDepth;
+}
 
 LARGE_INTEGER g_freq{};
 
@@ -176,6 +195,21 @@ int DecideRender(int fps) {
     return 1;
 }
 
+// 「描画するか」を決める 1 回目の呼び出しか。Frame_RenderA/B をフックしていると、先頭付近の call は
+// MinHook のトランポリンへ移されるので、戻り先がトランポリン内のときも 1 回目とみなす
+bool IsRenderDecisionCall(std::uintptr_t ret) {
+    if (ret == kRenderDecisionA || ret == kRenderDecisionB) {
+        return true;
+    }
+    for (auto* tramp : {static_cast<void*>(g_origRenderA), static_cast<void*>(g_origRenderB)}) {
+        const auto t = reinterpret_cast<std::uintptr_t>(tramp);
+        if (t && ret > t && ret < t + 64) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int __cdecl Hook_ShouldRender() {
     const int fps = GetConfig().targetFps;
     int render;
@@ -189,8 +223,7 @@ int __cdecl Hook_ShouldRender() {
     } else {
         render = g_origShouldRender();
     }
-    const auto ret = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    if (ret == kRenderDecisionA || ret == kRenderDecisionB) {
+    if (IsRenderDecisionCall(reinterpret_cast<std::uintptr_t>(_ReturnAddress()))) {
         ++(render ? g_stats.renders : g_stats.skips);
     }
     return render;
@@ -230,6 +263,15 @@ void InstallFrameHooks() {
     Hook(kFrameSkipShouldRender, &Hook_ShouldRender, reinterpret_cast<LPVOID*>(&g_origShouldRender),
          "FrameSkip_ShouldRender");
     Hook(kFrameLimit30, &Hook_FrameLimit30, reinterpret_cast<LPVOID*>(&g_origLimit), "Frame_Limit30");
+    if (GetConfig().logDrawList) {
+        // Frame_RenderA/B は引数なし・戻り値なし（呼び出し元 0x417471 / 0x41746A は結果を使わない）
+        Hook(kFrameRenderA, &Hook_FrameRenderA, reinterpret_cast<LPVOID*>(&g_origRenderA), "Frame_RenderA");
+        Hook(kFrameRenderB, &Hook_FrameRenderB, reinterpret_cast<LPVOID*>(&g_origRenderB), "Frame_RenderB");
+    }
+}
+
+bool InRenderPhase() {
+    return g_renderDepth > 0;
 }
 
 }  // namespace stcc

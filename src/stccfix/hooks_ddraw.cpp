@@ -459,6 +459,7 @@ LPVOID WidenVertices(D3DVERTEXTYPE vtype, LPVOID verts, DWORD count) {
 HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*)>(self, 11);
     HRESULT hr = fn(self);
+    DrawList_OnEndScene();
     if (!GetConfig().logGraphics) {
         return hr;
     }
@@ -471,6 +472,9 @@ HRESULT STDMETHODCALLTYPE Dev2_EndScene(IDirect3DDevice2* self) {
 
 HRESULT STDMETHODCALLTYPE Dev2_SetRenderState(IDirect3DDevice2* self, D3DRENDERSTATETYPE state, DWORD value) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DRENDERSTATETYPE, DWORD)>(self, 23);
+    if (state == D3DRENDERSTATE_TEXTUREHANDLE) {
+        DrawList_OnTexture(static_cast<unsigned>(value));
+    }
     if (GetConfig().logGraphics) {
         AcquireSRWLockExclusive(&g_drawLock);
         ++g_draw.setRenderState;
@@ -496,6 +500,8 @@ HRESULT STDMETHODCALLTYPE Dev2_SetTransform(IDirect3DDevice2* self, D3DTRANSFORM
 HRESULT STDMETHODCALLTYPE Dev2_DrawPrimitive(IDirect3DDevice2* self, D3DPRIMITIVETYPE prim, D3DVERTEXTYPE vtype,
                                              LPVOID verts, DWORD count, DWORD flags) {
     auto fn = Orig<HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice2*, D3DPRIMITIVETYPE, D3DVERTEXTYPE, LPVOID, DWORD, DWORD)>(self, 29);
+    DrawList_OnDraw(static_cast<unsigned>(prim), static_cast<unsigned>(vtype), verts, static_cast<unsigned>(count),
+                    _ReturnAddress());
     if (GetConfig().logGraphics) {
         AcquireSRWLockExclusive(&g_drawLock);
         ++g_draw.drawPrim;

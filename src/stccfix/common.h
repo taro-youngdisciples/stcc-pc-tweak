@@ -43,6 +43,8 @@ struct Config {
     bool logInput = false;     // DirectInput のデバイス列挙・プロパティ・GetDeviceState の変化をログ
     bool logWindow = false;    // 窓サイズ変更（SetWindowPos/MoveWindow の呼び出し元、WM_SIZE）をログ
     bool logFrame = false;     // 1 秒ごとのステップ数・描画/省略回数・上限の待ち時間をログ
+    // 補間の調査用: DrawPrimitive の呼び出し元（描画処理の中か）と、前フレームとの描画命令の並びの一致度・頂点の移動量をログ
+    bool logDrawList = false;
     // フレームのペース。0 = ゲームのまま（約 28 FPS 描画・約 34 ステップ/秒でコマ飛び）、
     // N = ステップごとに 1/N 秒で正確に待ち、遅れたときだけ描画を省く（hooks_frame.cpp）。
     // ゲームは 1 フレーム 1 ステップの 30Hz 固定なので、30 が本来の速さ。それ以外はゲームの速さも変わる
@@ -131,9 +133,18 @@ void InstallHudHooks();
 // ウィンドウモードの窓サイズ維持と 4:3 リサイズ。jp-1.02 専用。DllMain から呼ぶ
 void InstallWindowHooks();
 
+// ---------------------------------------------------------------- drawlist.cpp（LogDrawList、補間の調査用）
+void DrawList_OnTexture(unsigned handle);
+void DrawList_OnDraw(unsigned prim, unsigned vertexType, const void* verts, unsigned count, void* caller);
+void DrawList_OnEndScene();
+// PolyList_Flush をフックし、並べ替え前（積み込み順）のポリゴン一覧を前フレームと比べる。jp-1.02 専用
+void InstallDrawListHooks();
+
 // ---------------------------------------------------------------- hooks_frame.cpp
 // フレームの計測（LogFrame）と上限の差し替え（TargetFps）。jp-1.02 専用。DllMain から呼ぶ
 void InstallFrameHooks();
+// Frame_RenderA/B の実行中か（LogDrawList 時のみ有効。それ以外は常に false）
+bool InRenderPhase();
 
 // ---------------------------------------------------------------- hooks_game.cpp
 // ゲーム内の D3D 初期化関数（引数なし）の戻り値をログする。jp-1.02 専用。DllMain から呼ぶ

@@ -46,7 +46,8 @@ void Startup() {
     Log("config: WindowScale=%d KeepAspect=%d RememberWindowSize=%d BorderlessFullscreen=%d DpiAware=%d",
         cfg.windowScale, cfg.keepAspect ? 1 : 0, cfg.rememberWindowSize ? 1 : 0, cfg.borderlessFullscreen ? 1 : 0,
         cfg.dpiAware ? 1 : 0);
-    Log("config: TargetFps=%d LogFrame=%d LogWindow=%d", cfg.targetFps, cfg.logFrame ? 1 : 0, cfg.logWindow ? 1 : 0);
+    Log("config: TargetFps=%d LogFrame=%d LogDrawList=%d LogWindow=%d", cfg.targetFps, cfg.logFrame ? 1 : 0,
+        cfg.logDrawList ? 1 : 0, cfg.logWindow ? 1 : 0);
 
     if (cfg.dpiAware) {
         // ゲームが窓を作る前に宣言する。SetProcessDpiAwarenessContext は Win10 1703+（無ければ旧 API）
@@ -83,8 +84,11 @@ void Startup() {
     if (cfg.logGraphics) {
         InstallGameTraceHooks();
     }
-    if (cfg.logFrame || cfg.targetFps > 0) {
+    if (cfg.logFrame || cfg.logDrawList || cfg.targetFps > 0) {
         InstallFrameHooks();
+    }
+    if (cfg.logDrawList) {
+        InstallDrawListHooks();
     }
 }
 

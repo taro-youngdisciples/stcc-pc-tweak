@@ -27,6 +27,7 @@ add_library(stccfix SHARED
   src/stccfix/proxy_dinput.cpp
   src/stccfix/vtable_hook.h
   src/stccfix/vtable_hook.cpp
+  src/stccfix/drawlist.cpp
   src/stccfix/hooks_ddraw.cpp
   src/stccfix/hooks_dinput.cpp
   src/stccfix/hooks_frame.cpp
