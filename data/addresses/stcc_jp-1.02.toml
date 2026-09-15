@@ -328,6 +328,50 @@ addr = 0x00443570
 confidence = "confirmed"
 note = "thiscall(record*)。record: +0 材質*（+4/+5 テクスチャ番号、+6 フラグ）, +4 奥行き(16.16), +8 画面座標 int×(x,y)×4 と +0x20 から z int×4, +0xC フラグ。x,y × float[0x4A7A0C]、rhw = float[0x4A7A08] / z。this+0x358 に D3DTLVERTEX×4 を作り Gfx_DrawQuadTL"
 
+# ---- 表示設定（F6 Game Settings、2026-09-15）
+# F6 (40018) の処理 0x438AF0: Direct3D なら GameSettingsD3D_DoModal 0x45FBC0（DIALOG 193）、DirectDraw なら GameSettingsDD_DoModal 0x460090（DIALOG 103）
+# 走査方式・Texture Detail は DirectDraw 用ダイアログにしかなく、ソフトウェア描画だけで使われる（Direct3D では無効）
+
+[[global]]
+name = "g_DisplayType"
+addr = 0x0056C1A4
+type = "int"
+confidence = "confirmed"
+note = "走査方式 0=ノンインターレース 1=インターレース（DIALOG 103 の ID 1030/1004）。初期値 0 (0x462160)。レース中のソフトウェア背景描画 0x40C1E0 系と、0x4420C0 → 0x442080 → 0x4521F0（ソフトウェアのポリゴン描画 0x7F5C60+0x10）でだけ使用"
+
+[[global]]
+name = "g_TextureDetail"
+addr = 0x0056C1A8
+type = "int"
+confidence = "confirmed"
+note = "Texture Detail 0=High 1=Low（ID 1002/1003）。初期値 1 = Low (0x462160)。読むのは 0x4420E0 だけで、0x451DE0 → 0x4521E0 がソフトウェアのポリゴン描画オブジェクト 0x7F5C60+0x14 に入れ、0x4519D2（0x451700 のクリップ処理）が参照。Direct3D の出力 PolyList_EmitD3D からは使われない"
+
+[[global]]
+name = "g_Speedometer"
+addr = 0x0056C1AC
+type = "int"
+confidence = "confirmed"
+note = "0=km/h 1=MPH（ID 1005/1006）。0x405B27 で速度換算"
+
+[[global]]
+name = "g_D3DEffects"
+addr = 0x0066D108
+type = "int[4]"
+confidence = "confirmed"
+note = "取得 0x43C890(i) / 設定 0x43C880(i, v)。[0] Perspective Correction → SetRenderState(TEXTUREPERSPECTIVE=4) @0x468C20、rhw を計算（OFF なら 1.0）@0x4436D1 / [1] Bilinear Filtering → TEXTUREMAG(0x11)/TEXTUREMIN(0x12) = LINEAR(2) or NEAREST(1) @0x468C40、半テクセル補正 @0x443762 / [2] Alpha Blending → ALPHABLENDENABLE(0x1B) と SRCBLEND=SRCALPHA @0x468C90 / [3] Fog → FOGENABLE(0x1C)、FOGCOLOR(0x22) @0x468B90。DIALOG 193 の ID 1075〜1078"
+
+[[function]]
+name = "Settings_LoadStccDat"
+addr = 0x00439D20
+confidence = "confirmed"
+note = "STCC.DAT: word バージョン 0x0100、続いて [checksum 1 バイト + データ] × 3: 0x568A48 (0x3734 バイト), 0x56C210 (0xB24), 0x56C1A0 (0x68)。checksum はデータのバイト和 (0x439F60)。保存 0x439F80（最後に STCCD3D.DAT も保存）。0x56C1A4 はファイルの 16993 バイト目"
+
+[[function]]
+name = "Settings_LoadStccD3DDat"
+addr = 0x0043A230
+confidence = "confirmed"
+note = "STCCD3D.DAT (23 バイト): word 0x0100、checksum、DWORD×5 = [Direct3D を使う → 0x43C600, g_D3DEffects[0..3]]。無ければ DirectDraw・効果すべて 1。保存 0x43A350"
+
 [[function]]
 name = "Race_DrawSkyQuad"
 addr = 0x0040E590

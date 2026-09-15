@@ -364,6 +364,13 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - **方式 B（描画命令/一覧を前フレームと対応づけて補間）は不可**: アトラクトで、並べ替え後の DrawPrimitive 列の同位置一致 15〜30%（先頭一致約 1%）、並べ替え前（積み込み順）の材質一致 平均 8.7%（最低 3.8%）、件数一致 2%、一致しても平均数千 px 移動（別ポリゴン）。見える物が変わるたびに一覧がずれ、ポリゴンの同一性を取れない
 - **残る方式 A（ゲーム状態の補間）**: 描画処理の直前にカメラと各物体（車・動く物）の位置/向きを前ステップとの中間に書き換え、描画して元に戻す。必要なのは (1) 描画処理が読む変換データ（カメラ、車の姿勢）の特定 (2) 描画処理の副作用（アニメーション/パーティクル/カウンタ）の確認。リプレイ自由カメラ（目標 3）と同じ解析なので相乗効果。難度は高め、要メモリ差分解析（ユーザーの操作が必要）
 - 30fps のペース配分 (b) は完成していて、この調査とは独立
+- **ユーザー判断（2026-09-15）: 60fps 化は 30fps の安定化で止める**。補間は外部ツール（Lossless Scaling など）でもよい
+
+### 表示設定（F6 Game Settings）の調査（2026-09-15、詳細は toml「表示設定」）
+- F6 は Direct3D なら DIALOG 193（Perspective Correction / Bilinear Filtering / Alpha Blending / Fog / Speedometer）、DirectDraw なら DIALOG 103（**走査方式 / Texture Detail** / Speedometer）
+- **走査方式と Texture Detail はソフトウェア描画（DirectDraw）専用で、Direct3D では効かない**（Texture Detail はソフトウェアのポリゴン描画 0x7F5C60+0x14 だけが参照）
+- TAROCOCKPIT の現在値: STCC.DAT で走査方式=ノンインターレース(0)、**Texture Detail=Low(1、ゲームの初期値)**、Speedometer=km/h。STCCD3D.DAT で Direct3D=ON、4 効果すべて ON
+- Direct3D の 4 効果と SetRenderState の対応は確定（toml の g_D3DEffects）
 
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
