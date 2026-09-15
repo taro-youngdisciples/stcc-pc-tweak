@@ -372,6 +372,11 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - TAROCOCKPIT の現在値: STCC.DAT で走査方式=ノンインターレース(0)、**Texture Detail=Low(1、ゲームの初期値)**、Speedometer=km/h。STCCD3D.DAT で Direct3D=ON、4 効果すべて ON
 - Direct3D の 4 効果と SetRenderState の対応は確定（toml の g_D3DEffects）
 
+### dgVoodoo の画質設定（2026-09-15）
+- `[DirectX] Filtering = 16`（異方性）、`Mipmapping = autogen_bilinear`、`Antialiasing = 4x` を追加（リポジトリの conf と配置済み conf）
+- アトラクトで同じ時点を等倍比較: **車・影・縁石のジャギーが明確に減り、遠くの観客席/フェンスのざらつき（走行中のちらつき）が落ち着く**。路面のくっきり感はほぼ同じ（元テクスチャが粗い）。HUD は崩れず、FPS も維持
+- 比較用スクリプトはスクラッチの dgv_compare.ps1（conf を一時変更して起動・撮影・復元）。実レースでの確認はユーザー待ち
+
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
 - ツール: Git、VS Build Tools（C++ x86）、Python 3.13 + `.venv`（`tools\requirements.txt`）。Ghidra + JDK 21 は解析が必要になったときだけ

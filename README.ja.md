@@ -124,7 +124,9 @@ Win+R で `optionalfeatures` を実行し、**レガシ コンポーネント** 
 1. dgVoodoo2 を公式の入手元（<https://dege.freeweb.hu/> または <https://github.com/dege-diosg/dgVoodoo2/releases>）からダウンロードします。
 2. アーカイブ内の `MS\x86\DDraw.dll` と `MS\x86\D3DImm.dll` をゲームフォルダにコピーします。
 3. **stccfix のリリースに含まれる `dgVoodoo.conf`** をゲームフォルダにコピーします（dgVoodoo2 付属のものではありません）。
-   ウィンドウ表示、16bpp デスクトップ、メニューバーとダイアログ用の GDI フック、60fps 制限、描画解像度の固定など、このゲーム向けに設定済みです。
+   ウィンドウ表示、16bpp デスクトップ、メニューバーとダイアログ用の GDI フック、60fps 制限、描画解像度の固定、
+   16 倍の異方性フィルタリング（ミップマップ自動生成）と 4x アンチエイリアスなど、このゲーム向けに設定済みです。
+   GPU の負荷が高い場合は `Antialiasing` を `2x` か `appdriven` に下げてください。
 
 Windows Defender などのウイルス対策ソフトが dgVoodoo2 のアーカイブを検出した例があります。[トラブルシューティング](#トラブルシューティング)を参照してください。
 

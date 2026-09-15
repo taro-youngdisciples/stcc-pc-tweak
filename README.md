@@ -129,7 +129,8 @@ Without it Windows shows a "this app needs DirectPlay" dialog when the game star
 2. From the dgVoodoo2 archive, copy `MS\x86\DDraw.dll` and `MS\x86\D3DImm.dll` into the game folder.
 3. Copy **`dgVoodoo.conf` from the stccfix release** into the game folder (not the one shipped with dgVoodoo2).
    It is set up for this game: windowed, 16bpp desktop, GDI hook for the menu bar and dialogs, 60 fps limit,
-   fixed render resolution.
+   fixed render resolution, 16x anisotropic filtering with generated mipmaps and 4x anti-aliasing.
+   If your GPU struggles, lower `Antialiasing` to `2x` or `appdriven`.
 
 Some antivirus products, including Windows Defender, have flagged the dgVoodoo2 archive. See [Troubleshooting](#troubleshooting).
 
