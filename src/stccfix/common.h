@@ -46,7 +46,7 @@ struct Config {
     // フレームのペース。0 = ゲームのまま（約 28 FPS 描画・約 34 ステップ/秒でコマ飛び）、
     // N = ステップごとに 1/N 秒で正確に待ち、遅れたときだけ描画を省く（hooks_frame.cpp）。
     // ゲームは 1 フレーム 1 ステップの 30Hz 固定なので、30 が本来の速さ。それ以外はゲームの速さも変わる
-    int targetFps = 0;
+    int targetFps = 30;
     // ゲームに見せる DIDEVTYPE サブタイプ。0 = 変更しない。
     // ゲームは サブタイプ 4(GAMEPAD)→Game Pad、6(WHEEL)→Steering Wheel、それ以外→Joystick として選択肢を出す
     int inputDeviceSubtype = 0;

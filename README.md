@@ -42,6 +42,7 @@ It is designed to be used together with [dgVoodoo2](#4-install-dgvoodoo2).
 | Windows 11 | Starts in a window with the game's menu bar. Direct3D mode works in a window (the original game cannot do this). The window is enlarged to the largest size that fits the monitor and keeps its size when the game switches modes. |
 | Widescreen | Any ratio such as 16:9, 21:9 or 32:9. The 3D view fills the whole width (more is visible at the sides); the 2D HUD is not stretched. During races the HUD groups are moved to the left and right screen edges. The sky is extended rather than stretched. The rear-view mirror in the bumper camera is placed correctly. |
 | Fullscreen | Borderless fullscreen (applied at startup) and DPI awareness for Windows display scaling. |
+| Frame pacing | A steady 30 FPS at the intended game speed. The original limiter renders about 28 FPS with dropped frames while the game runs about 13% too fast. |
 | Analog controllers | Unlocks the game's analog "Joystick" and "Steering Wheel" modes for modern pads. Analog triggers can be used as accelerator and brake. Steering deadzone and response curve. |
 | Steering wheels | Choose which device the game sees, map separate pedal axes, invert and deadzone. Force feedback is off by default; an experimental game-driven mode exists but is not finished. |
 | Resolution | With dgVoodoo2, Direct3D renders the 3D scene at a high resolution such as 3413x1920. |
@@ -393,6 +394,12 @@ All settings are in `stccfix.ini` next to `dinput.dll`. Keep the file ASCII-only
 | `Smoothing` | `80` | `80` | ms | Time to ramp from 0 to `MaxForce`; 0 = off (`Mode=game`). |
 | `FadeInMs` | `1500` | `1500` | ms | Fade forces back in after they stopped for a second; 0 = off (`Mode=game`). |
 
+### [Frame]
+
+| Key | Release | If missing | Values | Meaning |
+|---|---|---|---|---|
+| `TargetFps` | `30` | `30` | 0, or 10-240 | `30` = wait precisely 1/30 s per game step and drop a frame only when really late (steady 30 FPS, intended speed). `0` = the game's own limiter (about 28 FPS, uneven, about 13% fast). The game advances one fixed 1/30 s step per frame, so any other value also changes the game speed (experimental). |
+
 ### [Debug]
 
 All logs go to `stccfix.log` in the game folder. Leave them at 0 unless you are diagnosing a problem; logging can slow the game down and make the log very large.
@@ -402,6 +409,7 @@ All logs go to `stccfix.log` in the game folder. Leave them at 0 unless you are 
 | `LogGraphics` | `0` | `0` | Log DirectDraw/Direct3D calls and the game's Direct3D initialization results. |
 | `LogInput` | `0` | `0` | Log DirectInput devices, axis properties and controller state changes. |
 | `LogWindow` | `0` | `0` | Log window size changes. |
+| `LogFrame` | `0` | `0` | Log game steps per second (speed), rendered and skipped frames, late steps and the longest gap between steps. |
 
 ## Known limitations
 
@@ -413,6 +421,7 @@ All logs go to `stccfix.log` in the game folder. Leave them at 0 unless you are 
 - **A DualShock 4 over Bluetooth may disconnect during play while Steam is running.** Closing Steam avoided it in testing.
   <!-- TODO: check whether turning off Steam's PlayStation controller support also helps -->
 - **The game does not detect a controller again after it disconnects.** Reconnect it, then open F5 and confirm the selection again.
+- **60 FPS is not available yet.** The game logic is fixed at 30 steps per second; raising `TargetFps` speeds up the whole game. Interpolated 60 FPS rendering is being investigated.
 - **Force feedback is not finished.** Use `Mode=off` (the default); `Mode=game` is an experiment.
 - Only the Japanese v1.02 executable is supported.
 - The mounted disc image is still required.

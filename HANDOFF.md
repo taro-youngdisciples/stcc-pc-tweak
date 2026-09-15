@@ -355,6 +355,8 @@ v1.02 は DirectInput 5 世代（`IDirectInputDevice2A`）で、**FFB 実装が�
 - `hooks_frame.cpp` を上記の設計で実装（Game_Frame 先頭で 1/N 秒待ち、4 周期以上遅れたら数え直し、元の上限は待たない、描画省略は 1 周期以上遅れたステップだけ・g_FrameSkip+8 の上限と +0x38 の停止要求は守る、2 回目の ShouldRender には同じ値）
 - アトラクト（g_GameState=0）の自動計測 TargetFps=30: **ステップ 30.0・描画 30・遅れ 0・描画間隔 33.3ms で一定**（元は 34 ステップ・27〜28 描画・48ms）。数秒おきに 1 秒だけ省略約 10 回（late=0 なので +0x38 の停止要求 = 場面切替のゲーム仕様）、ロード時の空き 185ms 後はすぐ復帰
 - 残り: レースでの確認（ユーザー）、問題なければリリース既定を TargetFps=30 に・README の設定表に追記、その後 (c) 補間の可否調査
+- **ユーザー確認（2026-09-15）: 「早送り感がなくなり、ヌルヌルになった」** → リリース ini とキー未指定時の既定を TargetFps=30 に、README（機能・設定表・既知の制限）に反映
+- 次: (c) 補間による 60fps 表示の可否調査
 
 ### 別 PC への移行チェックリスト
 - リポジトリ: git（サブモジュール `third_party/minhook` を含む。`git clone --recursive` か `git submodule update --init`）。ゲームのファイル・exe・dgVoodoo 本体・棚卸し結果は .gitignore 済みでリポジトリに入っていない
